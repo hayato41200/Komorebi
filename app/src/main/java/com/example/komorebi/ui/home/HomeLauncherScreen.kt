@@ -70,11 +70,13 @@ fun HomeLauncherScreen(
     val tabFocusRequesters = remember { List(tabs.size) { FocusRequester() } }
     val videoContentFocusRequester = remember { FocusRequester() }
     val homeContentFocusRequester = remember { FocusRequester() }
-    val epgFirstCellFocusRequester = remember { FocusRequester() }
 
     val activity = (LocalContext.current as? Activity)
     val recentRecordings by channelViewModel.recentRecordings.collectAsState()
     val watchHistory by homeViewModel.watchHistory.collectAsState(initial = emptyList<KonomiHistoryProgram>())
+    // 追加: 放送波タブ用のRequesterを定義
+    val epgTabFocusRequester = remember { FocusRequester() }
+    val epgFirstCellFocusRequester = remember { FocusRequester() }
 
     LaunchedEffect(Unit) {
         isVisible = true
@@ -159,7 +161,7 @@ fun HomeLauncherScreen(
                                             down = when(title) {
                                                 "ホーム" -> homeContentFocusRequester
                                                 "ビデオ" -> videoContentFocusRequester
-                                                "番組表" -> epgFirstCellFocusRequester
+                                                "番組表" -> epgTabFocusRequester
                                                 else -> FocusRequester.Default
                                             }
                                         }
@@ -243,7 +245,8 @@ fun HomeLauncherScreen(
                                     "番組表" -> {
                                         EpgScreen(
                                             viewModel = epgViewModel,
-                                            tabFocusRequester = tabFocusRequesters[2],
+                                            topTabFocusRequester = tabFocusRequesters[2],
+                                            tabFocusRequester = epgTabFocusRequester, // 修正
                                             firstCellFocusRequester = epgFirstCellFocusRequester
                                         )
                                     }

@@ -4,6 +4,7 @@ import android.os.Build
 import android.view.KeyEvent
 import androidx.annotation.RequiresApi
 import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
 import androidx.compose.foundation.background
@@ -12,9 +13,11 @@ import androidx.compose.foundation.layout.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.focus.onFocusChanged
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.input.key.KeyEventType
@@ -54,13 +57,25 @@ fun LiveContent(
         groupedChannels.keys.map { key -> if (key == "GR") "地デジ" else key }
     }
 
-    val listState = rememberTvLazyListState()
-    var showList by remember { mutableStateOf(false) }
+    // ★ 追加：各カテゴリーの横スクロール状態を保持するMap
+    // 本来は一階層上のScreenやViewModelで保持して渡すと、タブ切り替えでもリセットされなくなります
+    val rowStates = remember { mutableMapOf<String, androidx.tv.foundation.lazy.list.TvLazyListState>() }
 
-    // チャンネルIDごとにFocusRequesterを保持
+    val targetId = lastFocusedChannelId ?: lastWatchedChannel?.id
+    val initialCategoryIndex = remember(categories, targetId) {
+        if (targetId == null) 0 else {
+            categories.indexOfFirst { displayCat ->
+                val originalKey = if (displayCat == "地デジ") "GR" else displayCat
+                groupedChannels[originalKey]?.any { it.id == targetId } == true
+            }.coerceAtLeast(0)
+        }
+    }
+
+    val listState = rememberTvLazyListState(initialFirstVisibleItemIndex = initialCategoryIndex)
+    var showList by remember { mutableStateOf(false) }
     val channelFocusRequesters = remember { mutableMapOf<String, FocusRequester>() }
 
-    // 共通タイマー（進捗バー用）
+    // ... (Tickロジックはそのまま) ...
     var globalTick by remember { mutableIntStateOf(0) }
     LaunchedEffect(Unit) {
         showList = true
@@ -70,26 +85,28 @@ fun LiveContent(
         }
     }
 
-    // ★ フォーカスとスクロールの復元ロジック
+    // ★ 修正：フォーカス復元ロジックの強化
     LaunchedEffect(showList) {
-        if (showList) {
-            val targetId = lastFocusedChannelId ?: lastWatchedChannel?.id
+        if (showList && targetId != null) {
+            delay(150) // 少し短縮
 
-            if (targetId != null) {
-                // 1. まず該当するカテゴリーまでスクロール（画面内にないとフォーカスできないため）
-                val catIndex = categories.indexOfFirst { displayCat ->
-                    val originalKey = if (displayCat == "地デジ") "GR" else displayCat
-                    groupedChannels[originalKey]?.any { it.id == targetId } == true
-                }
-
-                if (catIndex >= 0) {
-                    listState.scrollToItem(catIndex)
-                }
-
-                // 2. アニメーションとリスト構築を待ってからフォーカス要求
-                delay(400)
-                channelFocusRequesters[targetId]?.requestFocus()
+            // 1. カテゴリーの縦位置を復元
+            if (listState.firstVisibleItemIndex != initialCategoryIndex) {
+                listState.scrollToItem(initialCategoryIndex)
             }
+
+            // 2. 該当チャンネルの横位置を特定し、スクロールを命令
+            val displayCategory = categories[initialCategoryIndex]
+            val originalKey = if (displayCategory == "地デジ") "GR" else displayCategory
+            val channelIndex = groupedChannels[originalKey]?.indexOfFirst { it.id == targetId } ?: -1
+
+            if (channelIndex >= 0) {
+                // そのカテゴリーの横スクロール状態を取得してスクロール
+                rowStates[displayCategory]?.scrollToItem(channelIndex)
+            }
+
+            delay(100)
+            channelFocusRequesters[targetId]?.requestFocus()
         }
     }
 
@@ -101,37 +118,50 @@ fun LiveContent(
             state = listState,
             modifier = Modifier.fillMaxSize(),
             contentPadding = PaddingValues(top = 16.dp, bottom = 32.dp),
-            verticalArrangement = Arrangement.spacedBy(24.dp)
+            verticalArrangement = Arrangement.spacedBy(24.dp),
+            pivotOffsets = PivotOffsets(parentFraction = 0.3f)
         ) {
-            items(categories, contentType = { "category" }) { displayCategory ->
+            items(categories, key = { it }) { displayCategory ->
                 val originalKey = if (displayCategory == "地デジ") "GR" else displayCategory
                 val channels = groupedChannels[originalKey] ?: emptyList()
                 val categoryIndex = categories.indexOf(displayCategory)
 
+                // ★ カテゴリーごとのTvLazyListStateを取得または生成
+                val rowState = rowStates.getOrPut(displayCategory) {
+                    // 戻ってきたときにそのチャンネルが画面内にくるよう初期値を計算
+                    val cIndex = if (targetId != null) channels.indexOfFirst { it.id == targetId } else -1
+                    androidx.tv.foundation.lazy.list.rememberTvLazyListState(
+                        initialFirstVisibleItemIndex = if (cIndex >= 0) cIndex else 0
+                    )
+                }
+
                 Column(modifier = Modifier.fillMaxWidth().graphicsLayer(clip = false)) {
                     Text(
                         text = displayCategory,
-                        style = MaterialTheme.typography.headlineSmall,
+                        style = MaterialTheme.typography.headlineSmall.copy(
+                            fontWeight = FontWeight.Light,
+                            letterSpacing = 1.sp
+                        ),
                         color = Color.White,
                         modifier = Modifier.padding(start = 32.dp, bottom = 8.dp)
                     )
 
                     TvLazyRow(
-                        horizontalArrangement = Arrangement.spacedBy(10.dp),
+                        state = rowState, // ★ 横位置の状態を適用
+                        horizontalArrangement = Arrangement.spacedBy(12.dp),
                         contentPadding = PaddingValues(horizontal = 32.dp),
                         pivotOffsets = PivotOffsets(parentFraction = 0.5f),
                         modifier = Modifier.fillMaxWidth().graphicsLayer(clip = false)
                     ) {
                         items(
                             items = channels,
-                            key = { it.id },
-                            contentType = { "channel_card" }
+                            key = { it.id }
                         ) { channel ->
-                            // IDに紐づくFocusRequesterを取得
                             val fr = channelFocusRequesters.getOrPut(channel.id) { FocusRequester() }
 
                             ChannelWideCard(
                                 channel = channel,
+                                // ... (引数はそのまま) ...
                                 mirakurunIp = mirakurunIp,
                                 mirakurunPort = mirakurunPort,
                                 globalTick = globalTick,
@@ -175,20 +205,53 @@ fun ChannelWideCard(
 ) {
     var isFocused by remember { mutableStateOf(false) }
 
+    // スケールと光を滑らかに同期させる
+    val animatedScale by animateFloatAsState(
+        targetValue = if (isFocused) 1.1f else 1f,
+        animationSpec = tween(250), // 250msがTV操作で最も心地よい速度です
+        label = "ScaleAnimation"
+    )
+
+    val glowAlpha by animateFloatAsState(
+        targetValue = if (isFocused) 0.6f else 0f,
+        animationSpec = tween(250),
+        label = "GlowAlpha"
+    )
+
     val progress = remember(channel.programPresent, globalTick) {
         calculateProgress(channel.programPresent?.startTime, channel.programPresent?.duration)
     }
 
+    // Surface自体に drawBehind を持たせることでレイアウトへの影響をゼロにします
     Surface(
         onClick = onClick,
         modifier = modifier
-            .width(150.dp)
-            .height(78.dp)
+            .width(160.dp) // 幅を微調整
+            .height(84.dp)
+            .graphicsLayer {
+                scaleX = animatedScale
+                scaleY = animatedScale
+            }
+            .drawBehind {
+                if (glowAlpha > 0f) {
+                    drawCircle(
+                        brush = Brush.radialGradient(
+                            colors = listOf(
+                                Color.White.copy(alpha = glowAlpha),
+                                Color.Transparent
+                            )
+                        ),
+                        // カードのサイズに合わせた光の範囲
+                        radius = size.width * 0.9f
+                    )
+                }
+            }
             .onFocusChanged { isFocused = it.isFocused },
         shape = ClickableSurfaceDefaults.shape(MaterialTheme.shapes.medium),
-        scale = ClickableSurfaceDefaults.scale(focusedScale = 1.12f),
+        // デフォルトのScaleは graphicsLayer で制御するため固定にします
+        scale = ClickableSurfaceDefaults.scale(focusedScale = 1f),
         colors = ClickableSurfaceDefaults.colors(
-            containerColor = Color.White.copy(alpha = 0.1f),
+            containerColor = Color.White.copy(alpha = 0.08f),
             focusedContainerColor = Color.White,
             contentColor = Color.White,
             focusedContentColor = Color.Black
@@ -196,33 +259,38 @@ fun ChannelWideCard(
     ) {
         Column(modifier = Modifier.fillMaxSize()) {
             Row(
-                modifier = Modifier.weight(1f).fillMaxWidth().padding(horizontal = 8.dp, vertical = 4.dp),
+                modifier = Modifier
+                    .weight(1f)
+                    .fillMaxWidth()
+                    .padding(horizontal = 10.dp, vertical = 6.dp),
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                // ロゴ表示（枠なし・元のサイズ）
                 AsyncImage(
                     model = "http://$mirakurunIp:$mirakurunPort/api/services/${buildStreamId(channel)}/logo",
                     contentDescription = null,
-                    modifier = Modifier.size(50.dp, 30.dp),
+                    modifier = Modifier.size(42.dp, 28.dp),
                     contentScale = ContentScale.Fit
                 )
 
-                Spacer(modifier = Modifier.width(8.dp))
+                Spacer(modifier = Modifier.width(10.dp))
 
                 Column(modifier = Modifier.fillMaxHeight(), verticalArrangement = Arrangement.Center) {
                     Text(
                         text = channel.name,
-                        style = MaterialTheme.typography.labelSmall,
-                        fontSize = 11.sp,
+                        style = MaterialTheme.typography.labelSmall.copy(
+                            fontWeight = FontWeight.Normal,
+                            fontSize = 10.sp
+                        ),
                         maxLines = 1,
-                        color = if (isFocused) Color.Black.copy(0.7f) else Color.White.copy(0.7f)
+                        color = if (isFocused) Color.Black.copy(0.6f) else Color.White.copy(0.5f)
                     )
 
                     Text(
                         text = channel.programPresent?.title ?: "放送休止中",
-                        style = MaterialTheme.typography.bodyMedium,
-                        fontSize = 14.sp,
-                        fontWeight = FontWeight.Bold,
+                        style = MaterialTheme.typography.bodyMedium.copy(
+                            fontWeight = FontWeight.Bold,
+                            fontSize = 13.sp
+                        ),
                         maxLines = 1,
                         overflow = if (isFocused) TextOverflow.Visible else TextOverflow.Ellipsis,
                         modifier = if (isFocused) Modifier.basicMarquee() else Modifier
@@ -231,8 +299,13 @@ fun ChannelWideCard(
             }
 
             if (channel.programPresent != null) {
-                Box(modifier = Modifier.fillMaxWidth().height(4.dp).background(Color.Gray.copy(0.1f))) {
-                    Box(modifier = Modifier.fillMaxWidth(progress).fillMaxHeight().background(if (isFocused) Color(0xFFD32F2F) else Color.White))
+                Box(modifier = Modifier.fillMaxWidth().height(3.5.dp).background(Color.Gray.copy(0.1f))) {
+                    Box(
+                        modifier = Modifier
+                            .fillMaxWidth(progress)
+                            .fillMaxHeight()
+                            .background(if (isFocused) Color(0xFFE53935) else Color.White.copy(alpha = 0.8f))
+                    )
                 }
             }
         }

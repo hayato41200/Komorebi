@@ -1,12 +1,12 @@
 package com.example.komorebi.ui.program
 
 import android.os.Build
+import androidx.activity.compose.BackHandler
 import androidx.annotation.RequiresApi
 import androidx.compose.animation.animateContentSize
 import androidx.compose.foundation.*
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -28,6 +28,10 @@ import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.zIndex
+// ★ 重要: TV Material 3 の Border をインポート
+import androidx.tv.material3.Border
+import androidx.tv.material3.ClickableSurfaceDefaults
+import androidx.tv.material3.Surface
 import coil.compose.AsyncImage
 import com.example.komorebi.data.model.EpgChannel
 import com.example.komorebi.data.model.EpgChannelWrapper
@@ -38,7 +42,6 @@ import com.example.komorebi.viewmodel.EpgViewModel
 import java.time.Duration
 import java.time.OffsetDateTime
 
-// 1分あたりの高さ設定
 private const val DP_PER_MINUTE = 1.3f
 private val HOUR_HEIGHT = (60 * DP_PER_MINUTE).dp
 
@@ -46,49 +49,69 @@ private val HOUR_HEIGHT = (60 * DP_PER_MINUTE).dp
 @Composable
 fun EpgScreen(
     viewModel: EpgViewModel,
-    tabFocusRequester: FocusRequester,
-    firstCellFocusRequester: FocusRequester
+    topTabFocusRequester: FocusRequester,
+    tabFocusRequester: FocusRequester, // 放送波タブ用のRequester
+    firstCellFocusRequester: FocusRequester // 番組セル用のRequester
 ) {
-    val uiState = viewModel.uiState //
-    // 基準時刻の保持
+    val uiState = viewModel.uiState
     val baseTime = remember { OffsetDateTime.now().withMinute(0).withSecond(0).withNano(0) }
+    var selectedBroadcastingType by remember { mutableStateOf("GR") }
 
-    LaunchedEffect(Unit) {
-        viewModel.loadEpg() //
+    val groupedChannels = remember(uiState) {
+        if (uiState is EpgUiState.Success) {
+            uiState.data.groupBy { it.channel.type ?: "UNKNOWN" }
+        } else {
+            emptyMap()
+        }
+    }
+
+    val categories = remember(groupedChannels) {
+        groupedChannels.keys.toList()
+    }
+
+    var isTabFocused by remember { mutableStateOf(false) }
+    var isGridFocused by remember { mutableStateOf(false) }
+
+    BackHandler(enabled = true) {
+        when {
+            isGridFocused -> tabFocusRequester.requestFocus()
+            isTabFocused -> topTabFocusRequester.requestFocus()
+            else -> topTabFocusRequester.requestFocus()
+        }
     }
 
     Column(Modifier.fillMaxSize().background(Color.Black)) {
-        // 放送波タブ (常に表示される安定版の状態)
-        Box(
-            modifier = Modifier
-                .fillMaxWidth()
-                .height(50.dp)
-                .background(Color(0xFF1A1A1A))
-                .focusRequester(tabFocusRequester)
-                .focusable(),
-            contentAlignment = Alignment.Center
-        ) {
-            Text("地デジ | BS | CS", color = Color.White, fontSize = 16.sp, fontWeight = FontWeight.Bold)
-        }
+        // 放送波切替タブ
+        BroadcastingTypeTabs(
+            selectedType = selectedBroadcastingType,
+            onTypeSelected = { selectedBroadcastingType = it },
+            tabFocusRequester = tabFocusRequester,
+            firstCellFocusRequester = firstCellFocusRequester, // 追加
+            categories = categories,
+            modifier = Modifier.onFocusChanged { isTabFocused = it.hasFocus }
+        )
 
         when (uiState) {
-            is EpgUiState.Loading -> { //
-                Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                    Text("読み込み中...", color = Color.White)
+            is EpgUiState.Success -> {
+                val displayChannels = groupedChannels[selectedBroadcastingType] ?: emptyList()
+                Box(modifier = Modifier.weight(1f).onFocusChanged { isGridFocused = it.hasFocus }) {
+                    EpgGrid(
+                        channels = displayChannels,
+                        baseTime = baseTime,
+                        viewModel = viewModel,
+                        tabFocusRequester = tabFocusRequester,
+                        firstCellFocusRequester = firstCellFocusRequester
+                    )
                 }
             }
-            is EpgUiState.Success -> { //
-                EpgGrid(
-                    channels = uiState.data,
-                    baseTime = baseTime,
-                    viewModel = viewModel,
-                    tabFocusRequester = tabFocusRequester,
-                    firstCellFocusRequester = firstCellFocusRequester
-                )
-            }
-            is EpgUiState.Error -> { //
+            is EpgUiState.Loading -> {
                 Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                    Text("エラー: ${uiState.message}", color = Color.Red)
+                    Text("Loading...", color = Color.White)
+                }
+            }
+            is EpgUiState.Error -> {
+                Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                    Text("エラーが発生しました", color = Color.Red)
                 }
             }
         }
@@ -104,11 +127,10 @@ fun EpgGrid(
     tabFocusRequester: FocusRequester,
     firstCellFocusRequester: FocusRequester
 ) {
-    val now = OffsetDateTime.now() //
+    val now = OffsetDateTime.now()
     val verticalScrollState = rememberScrollState()
     val horizontalScrollState = rememberScrollState()
 
-    // 現在時刻の赤線位置を計算
     fun getNowOffsetMinutes() = Duration.between(baseTime, OffsetDateTime.now()).toMinutes()
     var nowOffsetMinutes by remember { mutableStateOf(getNowOffsetMinutes()) }
 
@@ -125,7 +147,6 @@ fun EpgGrid(
     val totalGridWidth = channelWidth * channels.size
 
     Column(modifier = Modifier.fillMaxSize()) {
-        // チャンネルヘッダー行
         Row(modifier = Modifier.fillMaxWidth()) {
             Box(modifier = Modifier.width(timeColumnWidth).height(headerHeight).background(Color(0xFF111111)))
             Row(modifier = Modifier.horizontalScroll(horizontalScrollState)) {
@@ -136,17 +157,11 @@ fun EpgGrid(
         }
 
         Row(modifier = Modifier.fillMaxSize()) {
-            // 時刻カラム
-            Column(
-                modifier = Modifier.width(timeColumnWidth).verticalScroll(verticalScrollState).background(Color(0xFF111111))
-            ) {
+            Column(modifier = Modifier.width(timeColumnWidth).verticalScroll(verticalScrollState).background(Color(0xFF111111))) {
                 TimeColumnContent(baseTime)
             }
 
-            // 番組グリッド本体
-            Box(
-                modifier = Modifier.fillMaxSize().horizontalScroll(horizontalScrollState).verticalScroll(verticalScrollState)
-            ) {
+            Box(modifier = Modifier.fillMaxSize().horizontalScroll(horizontalScrollState).verticalScroll(verticalScrollState)) {
                 Row {
                     channels.forEachIndexed { channelIndex, channelWrapper ->
                         Box(modifier = Modifier.width(channelWidth).height(HOUR_HEIGHT * 24)) {
@@ -167,7 +182,6 @@ fun EpgGrid(
                     }
                 }
 
-                // 現在時刻の線
                 val lineOffset = (nowOffsetMinutes * DP_PER_MINUTE).dp
                 Box(modifier = Modifier.width(totalGridWidth).offset(y = lineOffset)) {
                     Box(modifier = Modifier.fillMaxWidth().height(2.dp).background(Color.Red))
@@ -192,16 +206,16 @@ fun CompactProgramCell(
     totalColumns: Int,
     modifier: Modifier = Modifier
 ) {
-    val startTime = remember(epgProgram.start_time) { OffsetDateTime.parse(epgProgram.start_time) } //
-    val endTime = remember(startTime, epgProgram.duration) { startTime.plusSeconds(epgProgram.duration.toLong()) } //
-    if (endTime.isBefore(baseTime)) return //
+    val startTime = remember(epgProgram.start_time) { OffsetDateTime.parse(epgProgram.start_time) }
+    val endTime = remember(startTime, epgProgram.duration) { startTime.plusSeconds(epgProgram.duration.toLong()) }
+    if (endTime.isBefore(baseTime)) return
 
     val minutesFromBase = Duration.between(baseTime, startTime).toMinutes()
     val topOffset = (minutesFromBase * DP_PER_MINUTE).dp
     val cellHeight = (epgProgram.duration / 60 * DP_PER_MINUTE).dp
 
     var isFocused by remember { mutableStateOf(false) }
-    val isPast = endTime.isBefore(now) //
+    val isPast = endTime.isBefore(now)
     val expandedMinHeight = 120.dp
 
     val isAtTop = topOffset <= 0.dp
@@ -224,7 +238,7 @@ fun CompactProgramCell(
                     true
                 } else false
             }
-            .onFocusChanged { isFocused = it.isFocused } //
+            .onFocusChanged { isFocused = it.isFocused }
             .focusable()
             .clickable { }
     ) {
@@ -232,7 +246,7 @@ fun CompactProgramCell(
             modifier = Modifier
                 .fillMaxWidth()
                 .wrapContentHeight(align = Alignment.Top, unbounded = true)
-                .animateContentSize() //
+                .animateContentSize()
                 .background(if (isPast) Color(0xFF151515) else Color(0xFF222222))
                 .then(
                     if (isFocused) {
@@ -243,7 +257,6 @@ fun CompactProgramCell(
                 )
         ) {
             Row(modifier = Modifier.height(IntrinsicSize.Min)) {
-                // ジャンルカラー
                 Box(modifier = Modifier.fillMaxHeight().width(4.dp).background(if (isPast) Color.Gray else EpgUtils.getGenreColor(epgProgram.majorGenre)))
                 Column(modifier = Modifier.padding(6.dp).fillMaxWidth()) {
                     val alpha = if (isPast) 0.5f else 1.0f
@@ -267,31 +280,44 @@ fun CompactProgramCell(
     }
 }
 
-// チャンネルヘッダーと時刻軸は変更なし
 @Composable
 fun ChannelHeaderCell(channel: EpgChannel, width: Dp, height: Dp, logoUrl: String) {
-    val typeLabel = remember(channel.type) {
-        when (channel.type?.uppercase()) {
-            "GR" -> "地デジ"
-            "BS" -> "BS"
-            "CS" -> "CS"
-            else -> "TV"
-        }
-    }
     Surface(
+        onClick = {},
         modifier = Modifier.width(width).height(height),
-        color = Color(0xFF111111),
-        border = BorderStroke(0.5.dp, Color(0xFF333333))
+        shape = ClickableSurfaceDefaults.shape(RectangleShape),
+        colors = ClickableSurfaceDefaults.colors(
+            containerColor = Color(0xFF111111),
+            contentColor = Color.White
+        ),
+        // ★修正ポイント: border を Border オブジェクトとして定義して渡す
+        border = ClickableSurfaceDefaults.border(
+            border = Border(
+                border = BorderStroke(0.5.dp, Color(0xFF333333))
+            )
+        )
     ) {
-        Row(modifier = Modifier.padding(horizontal = 6.dp), verticalAlignment = Alignment.CenterVertically) {
-            Box(modifier = Modifier.size(width = 44.dp, height = 25.dp).clip(RoundedCornerShape(2.dp)), contentAlignment = Alignment.Center) {
-                AsyncImage(model = logoUrl, contentDescription = null, contentScale = ContentScale.Fit, modifier = Modifier.fillMaxSize())
+        Column(
+            modifier = Modifier.fillMaxSize().padding(4.dp),
+            verticalArrangement = Arrangement.Center,
+            horizontalAlignment = Alignment.CenterHorizontally
+        ) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.Center
+            ) {
+                Box(
+                    modifier = Modifier.size(width = 36.dp, height = 20.dp).clip(RoundedCornerShape(2.dp)),
+                    contentAlignment = Alignment.Center
+                ) {
+                    AsyncImage(model = logoUrl, contentDescription = null, contentScale = ContentScale.Fit, modifier = Modifier.fillMaxSize())
+                }
+                Spacer(modifier = Modifier.width(6.dp))
+                Text(text = channel.channel_number ?: "", color = Color.White, fontSize = 14.sp, fontWeight = FontWeight.Bold)
             }
-            Spacer(modifier = Modifier.width(8.dp))
-            Column {
-                Text(text = channel.name, color = Color.White, fontSize = 11.sp, fontWeight = FontWeight.Bold, maxLines = 1, overflow = TextOverflow.Ellipsis)
-                Text(text = "$typeLabel ${channel.channel_number}", color = Color.Gray, fontSize = 9.sp)
-            }
+            Spacer(modifier = Modifier.height(2.dp))
+            Text(text = channel.name, color = Color.LightGray, fontSize = 10.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
         }
     }
 }
@@ -299,18 +325,112 @@ fun ChannelHeaderCell(channel: EpgChannel, width: Dp, height: Dp, logoUrl: Strin
 @RequiresApi(Build.VERSION_CODES.O)
 @Composable
 fun TimeColumnContent(baseTime: OffsetDateTime) {
+    val dayOfWeekJapan = listOf("日", "月", "火", "水", "木", "金", "土")
     repeat(24) { hourOffset ->
         val displayTime = baseTime.plusHours(hourOffset.toLong())
         Box(
-            modifier = Modifier.height(HOUR_HEIGHT).fillMaxWidth().drawBehind {
-                drawLine(Color(0xFF222222), androidx.compose.ui.geometry.Offset(0f, size.height), androidx.compose.ui.geometry.Offset(size.width, size.height), 1.dp.toPx())
-            },
+            modifier = Modifier.height(HOUR_HEIGHT).fillMaxWidth()
+                .drawBehind {
+                    drawLine(
+                        color = Color(0xFF222222),
+                        start = androidx.compose.ui.geometry.Offset(0f, size.height),
+                        end = androidx.compose.ui.geometry.Offset(size.width, size.height),
+                        strokeWidth = 1.dp.toPx()
+                    )
+                },
             contentAlignment = Alignment.Center
         ) {
             Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                if (displayTime.hour == 0) Text("${displayTime.monthValue}/${displayTime.dayOfMonth}", color = Color.Gray, fontSize = 8.sp)
-                Text("${displayTime.hour}", color = Color.White, fontSize = 20.sp, fontWeight = FontWeight.Black)
-                Text("時", color = Color.Gray, fontSize = 10.sp)
+                if (displayTime.hour == 0) {
+                    val dayOfWeekIndex = displayTime.dayOfWeek.value % 7
+                    val dayColor = when (dayOfWeekIndex) {
+                        0 -> Color(0xFFFF5252)
+                        6 -> Color(0xFF448AFF)
+                        else -> Color.White
+                    }
+                    Text(text = "${displayTime.monthValue}/${displayTime.dayOfMonth}", color = Color.White, fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                    Text(text = "(${dayOfWeekJapan[dayOfWeekIndex]})", color = dayColor, fontSize = 11.sp, fontWeight = FontWeight.Bold)
+                }
+                Text(text = "${displayTime.hour}", color = Color.White, fontSize = 22.sp, fontWeight = FontWeight.Black)
+                Text(text = "時", color = Color.Gray, fontSize = 10.sp)
+            }
+        }
+    }
+}
+
+@Composable
+fun BroadcastingTypeTabs(
+    selectedType: String,
+    onTypeSelected: (String) -> Unit,
+    tabFocusRequester: FocusRequester,
+    firstCellFocusRequester: FocusRequester,
+    categories: List<String>,
+    modifier: Modifier = Modifier
+) {
+    val typeLabels = mapOf("GR" to "地デジ", "BS" to "BS", "CS" to "CS", "BS4K" to "BS4K", "SKY" to "スカパー")
+
+    Row(
+        modifier = modifier
+            .fillMaxWidth()
+            .height(56.dp)
+            .background(Color.Black),
+        horizontalArrangement = Arrangement.Center,
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        categories.forEachIndexed { index, code ->
+            val label = typeLabels[code] ?: code
+            val isSelected = selectedType == code
+
+            Surface(
+                onClick = { onTypeSelected(code) },
+                modifier = Modifier
+                    .width(120.dp)
+                    .height(42.dp)
+                    .padding(horizontal = 4.dp)
+                    .focusRequester(if (index == 0) tabFocusRequester else FocusRequester())
+                    .focusProperties {
+                        down = firstCellFocusRequester
+                    },
+                shape = ClickableSurfaceDefaults.shape(RectangleShape),
+                colors = ClickableSurfaceDefaults.colors(
+                    // 通常時（非フォーカス）の背景
+                    containerColor = Color.Transparent,
+                    // フォーカス時の背景
+                    focusedContainerColor = Color.White,
+                    // ★ 修正: 非フォーカス時の文字色を「isSelected」に基づいて明示的に指定
+                    contentColor = if (isSelected) Color.White else Color.Gray,
+                    // ★ 修正: フォーカス時の文字色（黒）
+                    focusedContentColor = Color.Black
+                ),
+                scale = ClickableSurfaceDefaults.scale(focusedScale = 1.1f)
+            ) {
+                // Surface内部で LocalContentColor が更新される
+                Box(
+                    contentAlignment = Alignment.Center,
+                    modifier = Modifier.fillMaxSize()
+                ) {
+                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                        Text(
+                            text = label,
+                            fontSize = 16.sp,
+                            fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal,
+                            // ★ 修正: Surfaceから提供される LocalContentColor を使う
+                            // これで focusedContentColor や contentColor が自動適用される
+                            color = androidx.tv.material3.LocalContentColor.current
+                        )
+
+                        if (isSelected) {
+                            Spacer(modifier = Modifier.height(2.dp))
+                            Box(
+                                modifier = Modifier
+                                    .width(20.dp)
+                                    .height(2.dp)
+                                    // 下線も文字色と連動させる
+                                    .background(androidx.tv.material3.LocalContentColor.current)
+                            )
+                        }
+                    }
+                }
             }
         }
     }
