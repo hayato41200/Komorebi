@@ -57,11 +57,13 @@ fun EpgScreen(
     val baseTime = remember { OffsetDateTime.now().withMinute(0).withSecond(0).withNano(0) }
     var selectedBroadcastingType by remember { mutableStateOf("GR") }
 
-    val groupedChannels = remember(uiState) {
-        if (uiState is EpgUiState.Success) {
-            uiState.data.groupBy { it.channel.type ?: "UNKNOWN" }
-        } else {
-            emptyMap()
+    val groupedChannels by remember(uiState) {
+        derivedStateOf {
+            if (uiState is EpgUiState.Success) {
+                uiState.data.groupBy { it.channel.type ?: "UNKNOWN" }
+            } else {
+                emptyMap()
+            }
         }
     }
 
@@ -86,6 +88,7 @@ fun EpgScreen(
             selectedType = selectedBroadcastingType,
             onTypeSelected = { selectedBroadcastingType = it },
             tabFocusRequester = tabFocusRequester,
+            topTabFocusRequester = topTabFocusRequester,
             firstCellFocusRequester = firstCellFocusRequester, // 追加
             categories = categories,
             modifier = Modifier.onFocusChanged { isTabFocused = it.hasFocus }
@@ -151,7 +154,10 @@ fun EpgGrid(
             Box(modifier = Modifier.width(timeColumnWidth).height(headerHeight).background(Color(0xFF111111)))
             Row(modifier = Modifier.horizontalScroll(horizontalScrollState)) {
                 channels.forEach { wrapper ->
-                    ChannelHeaderCell(wrapper.channel, channelWidth, headerHeight, viewModel.getMirakurunLogoUrl(wrapper.channel))
+                    // key を使用して再利用性を高める
+                    key(wrapper.channel.id) {
+                        ChannelHeaderCell(wrapper.channel, channelWidth, headerHeight, viewModel.getMirakurunLogoUrl(wrapper.channel))
+                    }
                 }
             }
         }
@@ -167,16 +173,20 @@ fun EpgGrid(
                         Box(modifier = Modifier.width(channelWidth).height(HOUR_HEIGHT * 24)) {
                             channelWrapper.programs.forEachIndexed { programIndex, program ->
                                 val isFirstEverCell = channelIndex == 0 && programIndex == 0
-                                CompactProgramCell(
-                                    epgProgram = program,
-                                    baseTime = baseTime,
-                                    now = now,
-                                    width = channelWidth,
-                                    tabFocusRequester = tabFocusRequester,
-                                    columnIndex = channelIndex,
-                                    totalColumns = channels.size,
-                                    modifier = if (isFirstEverCell) Modifier.focusRequester(firstCellFocusRequester) else Modifier
-                                )
+                                key(program.id) {
+                                    CompactProgramCell(
+                                        epgProgram = program,
+                                        baseTime = baseTime,
+                                        now = now,
+                                        width = channelWidth,
+                                        tabFocusRequester = tabFocusRequester,
+                                        columnIndex = channelIndex,
+                                        totalColumns = channels.size,
+                                        modifier = if (isFirstEverCell) Modifier.focusRequester(
+                                            firstCellFocusRequester
+                                        ) else Modifier
+                                    )
+                                }
                             }
                         }
                     }
@@ -362,8 +372,9 @@ fun TimeColumnContent(baseTime: OffsetDateTime) {
 fun BroadcastingTypeTabs(
     selectedType: String,
     onTypeSelected: (String) -> Unit,
-    tabFocusRequester: FocusRequester,
     firstCellFocusRequester: FocusRequester,
+    tabFocusRequester: FocusRequester,      // このコンポーネント自体のRequester
+    topTabFocusRequester: FocusRequester,   // ★追加：親の「番組表」タブのRequester
     categories: List<String>,
     modifier: Modifier = Modifier
 ) {
@@ -390,21 +401,19 @@ fun BroadcastingTypeTabs(
                     .focusRequester(if (index == 0) tabFocusRequester else FocusRequester())
                     .focusProperties {
                         down = firstCellFocusRequester
+                        up = topTabFocusRequester
                     },
                 shape = ClickableSurfaceDefaults.shape(RectangleShape),
                 colors = ClickableSurfaceDefaults.colors(
-                    // 通常時（非フォーカス）の背景
-                    containerColor = Color.Transparent,
-                    // フォーカス時の背景
-                    focusedContainerColor = Color.White,
-                    // ★ 修正: 非フォーカス時の文字色を「isSelected」に基づいて明示的に指定
+                    containerColor = Color.Transparent,     // 通常時の背景は透明
+                    focusedContainerColor = Color.White,    // フォーカス時は白背景
+                    // ★修正: 非フォーカス時の文字色を選択状態に応じて明示
                     contentColor = if (isSelected) Color.White else Color.Gray,
-                    // ★ 修正: フォーカス時の文字色（黒）
+                    // ★修正: フォーカス時は背景が白になるので文字を黒にする
                     focusedContentColor = Color.Black
                 ),
                 scale = ClickableSurfaceDefaults.scale(focusedScale = 1.1f)
             ) {
-                // Surface内部で LocalContentColor が更新される
                 Box(
                     contentAlignment = Alignment.Center,
                     modifier = Modifier.fillMaxSize()
@@ -414,18 +423,18 @@ fun BroadcastingTypeTabs(
                             text = label,
                             fontSize = 16.sp,
                             fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal,
-                            // ★ 修正: Surfaceから提供される LocalContentColor を使う
-                            // これで focusedContentColor や contentColor が自動適用される
+                            // ★重要: Surfaceが決定した色(LocalContentColor)をTextに適用する
                             color = androidx.tv.material3.LocalContentColor.current
                         )
 
+                        // 選択中インジケーター（下線）
                         if (isSelected) {
                             Spacer(modifier = Modifier.height(2.dp))
                             Box(
                                 modifier = Modifier
                                     .width(20.dp)
                                     .height(2.dp)
-                                    // 下線も文字色と連動させる
+                                    // 下線の色も現在の文字色に合わせる
                                     .background(androidx.tv.material3.LocalContentColor.current)
                             )
                         }

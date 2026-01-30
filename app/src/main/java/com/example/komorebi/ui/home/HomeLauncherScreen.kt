@@ -142,6 +142,7 @@ fun HomeLauncherScreen(
                     ) {
                         Row(horizontalArrangement = Arrangement.spacedBy(16.dp)) {
                             tabs.forEachIndexed { index, title ->
+                                val isEpgTab = title == "番組表"
                                 val currentTime = System.currentTimeMillis()
                                 val isTabFocusable = selectedProgram == null && (currentTime - lastBackPressTime > 1000)
 
