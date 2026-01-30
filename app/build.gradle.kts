@@ -8,7 +8,7 @@ plugins {
 }
 
 android {
-    namespace = "com.example.Komirebi"
+    namespace = "com.example.Komorebi"
     compileSdk = 35
 
     defaultConfig {
