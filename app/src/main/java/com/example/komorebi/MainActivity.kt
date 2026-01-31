@@ -23,44 +23,53 @@ import com.example.komorebi.ui.home.LoadingScreen
 import com.example.komorebi.ui.live.LivePlayerScreen
 import com.example.komorebi.viewmodel.Channel
 import com.example.komorebi.viewmodel.ChannelViewModel
+import com.example.komorebi.viewmodel.EpgViewModel
 import dagger.hilt.android.AndroidEntryPoint
 
-@AndroidEntryPoint // ← これに変える！
+@AndroidEntryPoint
 class MainActivity : ComponentActivity() {
 
     private val viewModel: ChannelViewModel by viewModels()
+    private val epgViewModel: EpgViewModel by viewModels() // ★追加
 
     @RequiresApi(Build.VERSION_CODES.O)
     @OptIn(ExperimentalTvMaterial3Api::class)
     override fun onCreate(savedInstanceState: Bundle?) {
-        if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.Q) {
-            window.colorMode = android.content.pm.ActivityInfo.COLOR_MODE_HDR
-        }
         super.onCreate(savedInstanceState)
+
+        // 両方のデータをフェッチ開始
         viewModel.fetchChannels()
+        epgViewModel.preloadAllEpgData() // ★番組表のプリロード開始
 
         setContent {
             DTVClientTheme {
                 val context = LocalContext.current
                 val activity = context as? Activity
-                val isLoading by viewModel.isLoading.collectAsState()
+
+                // 放送局リストのロード状態
+                val isChannelLoading by viewModel.isLoading.collectAsState()
+                // 番組表のプリロード状態
+                val isEpgLoading by epgViewModel.isPreloading.collectAsState()
+
+                // ★ 両方が終わるまでLoadingを表示
+                val totalLoading = isChannelLoading && isEpgLoading
+
                 val groupedChannels by viewModel.groupedChannels.collectAsState()
 
-                // --- 状態保持 ---
+                // --- 状態保持（変更なし） ---
                 var selectedChannel by remember { mutableStateOf<Channel?>(null) }
                 var isPlayerMode by remember { mutableStateOf(false) }
-                var isSettingsMode by remember { mutableStateOf(false) } // ★設定画面フラグ
+                var isSettingsMode by remember { mutableStateOf(false) }
                 var isMiniListOpen by remember { mutableStateOf(false) }
                 var showExitDialog by remember { mutableStateOf(false) }
                 var currentTabIndex by remember { mutableIntStateOf(0) }
+
                 val repository = remember { SettingsRepository(context) }
                 val mirakurunIp by repository.mirakurunIp.collectAsState(initial = "192.168.100.60")
                 val mirakurunPort by repository.mirakurunPort.collectAsState(initial = "40772")
                 val konomiIp by repository.konomiIp.collectAsState(initial = "https://192-168-100-60.local.konomi.tv")
                 val konomiPort by repository.konomiPort.collectAsState(initial = "7000")
 
-
-                // システムバックボタン（リモコンの戻るキー）の制御
                 BackHandler(enabled = true) {
                     when {
                         isPlayerMode -> isPlayerMode = false
@@ -69,22 +78,18 @@ class MainActivity : ComponentActivity() {
                     }
                 }
 
-                if (isLoading) {
-                    Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                        LoadingScreen()
-                    }
+                if (totalLoading) {
+                    LoadingScreen()
                 } else {
-                    // --- 画面遷移の分岐 ---
                     Box(modifier = Modifier.fillMaxSize()) {
                         when {
-                            // 1. プレイヤー画面
                             isPlayerMode -> {
                                 selectedChannel?.let { currentChannel ->
                                     key(currentChannel.id) {
                                         LivePlayerScreen(
                                             channel = currentChannel,
-                                            mirakurunIp = mirakurunIp,     // ★追加
-                                            mirakurunPort = mirakurunPort, // ★追加
+                                            mirakurunIp = mirakurunIp,
+                                            mirakurunPort = mirakurunPort,
                                             groupedChannels = groupedChannels,
                                             isMiniListOpen = isMiniListOpen,
                                             onMiniListToggle = { isMiniListOpen = it },
@@ -97,15 +102,9 @@ class MainActivity : ComponentActivity() {
                                     }
                                 }
                             }
-
-                            // 2. 設定画面
                             isSettingsMode -> {
-                                SettingsScreen(
-                                    onBack = { isSettingsMode = false }
-                                )
+                                SettingsScreen(onBack = { isSettingsMode = false })
                             }
-
-                            // 3. ホームランチャー画面
                             else -> {
                                 HomeLauncherScreen(
                                     groupedChannels = groupedChannels,
@@ -115,14 +114,13 @@ class MainActivity : ComponentActivity() {
                                     konomiIp = konomiIp,
                                     konomiPort = konomiPort,
                                     initialTabIndex = currentTabIndex,
+                                    // ★ EpgViewModel を明示的に渡すか、HomeLauncherScreen内でHiltから取得する
                                     onChannelClick = { channel ->
                                         selectedChannel = channel
                                         currentTabIndex = 1
                                         isPlayerMode = true
                                     },
-                                    onSettingsClick = {
-                                        isSettingsMode = true // ★設定画面へ遷移
-                                    }
+                                    onSettingsClick = { isSettingsMode = true }
                                 )
                             }
                         }
@@ -130,10 +128,7 @@ class MainActivity : ComponentActivity() {
                 }
 
                 if (showExitDialog) {
-                    ExitDialog(
-                        onConfirm = { activity?.finish() },
-                        onDismiss = { showExitDialog = false }
-                    )
+                    ExitDialog(onConfirm = { activity?.finish() }, onDismiss = { showExitDialog = false })
                 }
             }
         }

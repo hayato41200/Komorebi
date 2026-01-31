@@ -5,7 +5,9 @@ import androidx.annotation.RequiresApi
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
+import com.example.komorebi.data.model.EpgProgram
 import java.time.OffsetDateTime
+import java.time.format.DateTimeFormatter
 import java.time.temporal.ChronoUnit
 
 /**
@@ -66,6 +68,19 @@ object EpgUtils {
             time.format(java.time.format.DateTimeFormatter.ofPattern("HH:mm"))
         } catch (e: Exception) {
             "--:--"
+        }
+    }
+
+    @RequiresApi(Build.VERSION_CODES.O)
+    fun formatEndTime(program: EpgProgram): String {
+        return try {
+            val startTime = OffsetDateTime.parse(program.start_time)
+            // 秒数を分に変換して加算（durationが秒単位の場合）
+            val endTime = startTime.plusSeconds(program.duration.toLong())
+            val formatter = DateTimeFormatter.ofPattern("HH:mm")
+            endTime.format(formatter)
+        } catch (e: Exception) {
+            ""
         }
     }
 }

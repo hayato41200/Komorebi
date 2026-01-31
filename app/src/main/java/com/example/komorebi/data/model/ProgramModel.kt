@@ -45,6 +45,7 @@ data class EpgProgram(
     val event_id: Int,
     val title: String,
     val description: String,
+    val extended: String? = null,
     val detail: Map<String, String>?, // "番組内容": "..." 等の動的プロパティ
     val start_time: String,           // ISO8601形式
     val end_time: String,

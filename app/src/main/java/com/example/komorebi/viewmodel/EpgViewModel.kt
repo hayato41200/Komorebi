@@ -15,6 +15,10 @@ import java.time.OffsetDateTime
 import javax.inject.Inject
 import com.example.komorebi.data.SettingsRepository
 import com.example.komorebi.data.model.EpgChannel
+import kotlinx.coroutines.async
+import kotlinx.coroutines.awaitAll
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.first
 
 @RequiresApi(Build.VERSION_CODES.O)
@@ -28,9 +32,17 @@ class EpgViewModel @Inject constructor(
     var uiState by mutableStateOf<EpgUiState>(EpgUiState.Loading)
         private set
 
+    private val _isPreloading = MutableStateFlow(true)
+    val isPreloading: StateFlow<Boolean> = _isPreloading
+    private val broadcastingTypes = listOf("GR", "BS", "CS", "BS4K", "SKY")
+
     // ロゴ生成用に現在のベースURLを保持
     private var currentBaseUrl by mutableStateOf("")
     private var mirakurunBaseUrl by mutableStateOf("")
+
+    // 選択されたチャンネルIDを保持するState（Player画面がこれを監視して再生を開始する）
+    private val _selectedChannelId = MutableStateFlow<String?>(null)
+    val selectedChannelId: StateFlow<String?> = _selectedChannelId
 
     init {
         // 初期化時にベースURLを取得しておく
@@ -67,6 +79,58 @@ class EpgViewModel @Inject constructor(
                 onFailure = { EpgUiState.Error(it.message ?: "Unknown Error") }
             )
         }
+    }
+
+    @RequiresApi(Build.VERSION_CODES.O)
+    fun preloadAllEpgData() {
+        viewModelScope.launch {
+            _isPreloading.value = true
+            uiState = EpgUiState.Loading
+            try {
+                // 現在時刻から直近の0分0秒を起点にする
+                val baseTime = OffsetDateTime.now().withMinute(0).withSecond(0).withNano(0)
+
+                // 各放送波（GR, BS, CS...）ごとに並列でリクエストを投げる
+                val deferredList = broadcastingTypes.map { type ->
+                    async {
+                        // Result<List<EpgChannelWrapper>> が返ってくるので getOrThrow() で展開
+                        repository.fetchEpgData(
+                            startTime = baseTime,
+                            channelType = type,
+                            days = 1 // 必要に応じて期間を調整
+                        ).getOrThrow()
+                    }
+                }
+
+                // awaitAll() で全放送波の結果を待ち、flatten() で一つの List<EpgChannelWrapper> にまとめる
+                val allData = deferredList.awaitAll().flatten()
+
+                uiState = EpgUiState.Success(allData)
+            } catch (e: Exception) {
+                e.printStackTrace()
+                uiState = EpgUiState.Error(e.message ?: "Unknown Error")
+            } finally {
+                _isPreloading.value = false
+            }
+        }
+    }
+
+    /**
+     * 指定されたチャンネルIDで再生を開始する
+     */
+    fun playChannel(channelId: String) {
+        viewModelScope.launch {
+            _selectedChannelId.value = channelId
+            // ここで必要に応じて、再生画面への遷移フラグを立てたり、
+            // 最後に視聴したチャンネルとして保存する処理を追加します
+        }
+    }
+
+    /**
+     * 再生完了後やエラー時にIDをクリアする
+     */
+    fun clearSelectedChannel() {
+        _selectedChannelId.value = null
     }
 
     // チャンネルオブジェクトから URL を生成する
