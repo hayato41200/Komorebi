@@ -77,7 +77,7 @@ class MainActivity : ComponentActivity() {
 //                        else -> showExitDialog = true
 //                    }
 //                }
-                BackHandler(enabled = !isPlayerMode && !isSettingsMode) {
+                BackHandler(enabled = !isPlayerMode || !isSettingsMode) {
                     showExitDialog = true
                 }
 

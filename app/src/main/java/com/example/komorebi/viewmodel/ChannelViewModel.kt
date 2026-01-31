@@ -25,7 +25,7 @@ class ChannelViewModel @Inject constructor(
     private val _recentRecordings = MutableStateFlow<List<RecordedProgram>>(emptyList())
     val recentRecordings: StateFlow<List<RecordedProgram>> = _recentRecordings
 
-    private val _isRecordingLoading = MutableStateFlow(false)
+    private val _isRecordingLoading = MutableStateFlow(true)
     val isRecordingLoading: StateFlow<Boolean> = _isRecordingLoading
 
     private var pollingJob: Job? = null

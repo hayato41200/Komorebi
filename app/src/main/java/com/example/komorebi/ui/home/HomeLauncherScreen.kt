@@ -14,6 +14,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material3.AlertDialog
 import androidx.compose.runtime.*
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.ExperimentalComposeUiApi
 import androidx.compose.ui.Modifier
@@ -60,6 +61,7 @@ fun HomeLauncherScreen(
 ) {
     val tabs = listOf("ホーム", "ライブ", "番組表", "ビデオ")
 
+    // --- 状態管理 ---
     var selectedTabIndex by remember { mutableIntStateOf(if (lastWatchedChannel != null) 1 else initialTabIndex) }
     var focusedTabIndex by remember { mutableIntStateOf(selectedTabIndex) }
     var tabRowHasFocus by remember { mutableStateOf(false) }
@@ -69,24 +71,27 @@ fun HomeLauncherScreen(
     var lastFocusedChannelId by remember { mutableStateOf<String?>(null) }
     var lastBackPressTime by remember { mutableLongStateOf(0L) }
 
+    // 放送波の状態をトップレベルで保持（GR, BS, CS...）
+    var selectedBroadcastingType by rememberSaveable { mutableStateOf("GR") }
+
+    // --- フォーカス制御用 ---
     val tabFocusRequesters = remember { List(tabs.size) { FocusRequester() } }
     val videoContentFocusRequester = remember { FocusRequester() }
     val homeContentFocusRequester = remember { FocusRequester() }
+    val epgTabFocusRequester = remember { FocusRequester() } // 放送波切り替え用
+    val epgFirstCellFocusRequester = remember { FocusRequester() }
 
     val activity = (LocalContext.current as? Activity)
     val recentRecordings by channelViewModel.recentRecordings.collectAsState()
     val watchHistory by homeViewModel.watchHistory.collectAsState(initial = emptyList<KonomiHistoryProgram>())
-    // 追加: 放送波タブ用のRequesterを定義
-    val epgTabFocusRequester = remember { FocusRequester() }
-    val epgFirstCellFocusRequester = remember { FocusRequester() }
     val watchHistoryEntities by homeViewModel.localWatchHistory.collectAsState()
     var epgSelectedProgram by remember { mutableStateOf<EpgProgram?>(null) }
 
-// EntityリストをProgramリストに変換してUIに渡す
     val watchHistoryPrograms = remember(watchHistoryEntities) {
         watchHistoryEntities.map { it.toRecordedProgram() }
     }
 
+    // 初期フォーカス設定
     LaunchedEffect(Unit) {
         isVisible = true
         if (lastWatchedChannel == null) {
@@ -95,6 +100,7 @@ fun HomeLauncherScreen(
         }
     }
 
+    // タブ切り替え時のデータ更新
     LaunchedEffect(selectedTabIndex) {
         when (tabs[selectedTabIndex]) {
             "ビデオ" -> channelViewModel.fetchRecentRecordings()
@@ -103,41 +109,36 @@ fun HomeLauncherScreen(
         }
     }
 
+    // --- 戻るキーのハンドリング ---
     BackHandler(enabled = true) {
-        val currentTab = tabs[selectedTabIndex] // 現在のタブ名を取得
+        val currentTab = tabs[selectedTabIndex]
 
         when {
-            // 1. 番組表のモーダルが表示されている場合は、それを閉じる（最優先）
-            epgSelectedProgram != null -> {
-                epgSelectedProgram = null
-            }
-            // 2. ビデオのプレイヤー/詳細が表示されている場合
+            epgSelectedProgram != null -> epgSelectedProgram = null
             selectedProgram != null -> {
                 lastBackPressTime = System.currentTimeMillis()
                 selectedProgram = null
                 homeViewModel.refreshHomeData()
                 videoContentFocusRequester.requestFocus()
             }
-            // 3. 終了ダイアログ表示中
             showExitDialog -> showExitDialog = false
 
-            // 4. 【重要】番組表タブにいる時のフォーカス制御
+            // 番組表グリッド内にいる場合は、放送波タブへ戻す
             currentTab == "番組表" && !tabRowHasFocus -> {
-                // 番組表のグリッドにフォーカスがあるなら、放送波タブ(GR/BS等)へ戻す
                 epgTabFocusRequester.requestFocus()
             }
 
-            // 5. その他のコンテンツにフォーカスがある場合はタブへ戻す
+            // コンテンツエリアにいる場合は、トップナビタブへ戻す
             !tabRowHasFocus -> {
                 tabFocusRequesters[selectedTabIndex].requestFocus()
             }
 
-            // 6. ホームタブ以外ならホームへ戻る
+            // ホーム以外のタブならホームへ戻る
             selectedTabIndex != 0 -> {
                 selectedTabIndex = 0
                 tabFocusRequesters[0].requestFocus()
             }
-            // 7. ホームタブにいてタブにフォーカスがあるなら終了確認
+            // 終了確認
             else -> showExitDialog = true
         }
     }
@@ -162,20 +163,18 @@ fun HomeLauncherScreen(
         ) {
             Box(modifier = Modifier.fillMaxSize().background(Color(0xFF121212))) {
                 Column(modifier = Modifier.fillMaxSize()) {
-                    // --- スリム化・タイポグラフィ最適化されたナビゲーション ---
+                    // --- メインナビゲーション ---
                     Row(
                         modifier = Modifier
                             .fillMaxWidth()
-                            .padding(top = 18.dp, start = 40.dp, end = 40.dp) // 余白を広げ優雅さを強調
+                            .padding(top = 18.dp, start = 40.dp, end = 40.dp)
                             .onFocusChanged { tabRowHasFocus = it.hasFocus },
                         verticalAlignment = Alignment.CenterVertically
                     ) {
                         Row(horizontalArrangement = Arrangement.spacedBy(16.dp)) {
                             tabs.forEachIndexed { index, title ->
-                                val isEpgTab = title == "番組表"
                                 val currentTime = System.currentTimeMillis()
                                 val isTabFocusable = selectedProgram == null && (currentTime - lastBackPressTime > 1000)
-
                                 val isSelected = selectedTabIndex == index
                                 val isFocused = tabRowHasFocus && focusedTabIndex == index
 
@@ -189,6 +188,7 @@ fun HomeLauncherScreen(
                                             }
                                         }
                                         .focusProperties {
+                                            // 下方向のフォーカス移動を各セクションへ紐付け
                                             down = when(title) {
                                                 "ホーム" -> homeContentFocusRequester
                                                 "ビデオ" -> videoContentFocusRequester
@@ -205,22 +205,21 @@ fun HomeLauncherScreen(
                                         Text(
                                             text = title,
                                             style = MaterialTheme.typography.titleMedium.copy(
-                                                fontWeight = FontWeight.Light, // 日本語をスタイリッシュにする細いウェイト
-                                                letterSpacing = 1.2.sp,        // 文字間隔を広く取り、モダンな印象に
-                                                fontSize = 16.sp,              // 大きすぎない繊細なサイズ
+                                                fontWeight = FontWeight.Light,
+                                                letterSpacing = 1.2.sp,
+                                                fontSize = 16.sp,
                                             ),
                                             color = when {
                                                 isSelected -> Color.White
                                                 isFocused -> Color.White.copy(alpha = 0.85f)
-                                                else -> Color.White.copy(alpha = 0.25f) // 非アクティブをさらに薄くし、洗練さをアップ
+                                                else -> Color.White.copy(alpha = 0.25f)
                                             }
                                         )
                                         Spacer(modifier = Modifier.height(8.dp))
-                                        // インジケーター：選択中のみ表示される細い線
                                         Box(
                                             modifier = Modifier
                                                 .width(28.dp)
-                                                .height(1.5.dp) // 3dpから1.5dpに細くし、シャープな印象に
+                                                .height(1.5.dp)
                                                 .background(if (isSelected) Color.White else Color.Transparent)
                                         )
                                     }
@@ -237,13 +236,13 @@ fun HomeLauncherScreen(
                             Icon(
                                 Icons.Default.Settings,
                                 contentDescription = "設定",
-                                tint = Color.White.copy(alpha = 0.4f), // アイコンも主張を抑える
+                                tint = Color.White.copy(alpha = 0.4f),
                                 modifier = Modifier.size(20.dp)
                             )
                         }
                     }
 
-                    // --- コンテンツエリア (ナビゲーションとの一体感を出すため余白を調整) ---
+                    // --- コンテンツエリア ---
                     Box(modifier = Modifier.fillMaxSize().padding(top = 4.dp)) {
                         AnimatedContent(
                             targetState = selectedTabIndex,
@@ -279,8 +278,11 @@ fun HomeLauncherScreen(
                                             topTabFocusRequester = tabFocusRequesters[2],
                                             tabFocusRequester = epgTabFocusRequester,
                                             firstCellFocusRequester = epgFirstCellFocusRequester,
-                                            selectedProgram = epgSelectedProgram,     // ★ 追加
-                                            onProgramSelected = { epgSelectedProgram = it } // ★ 追加
+                                            selectedProgram = epgSelectedProgram,
+                                            onProgramSelected = { epgSelectedProgram = it },
+                                            // ここで状態を受け渡し
+                                            selectedBroadcastingType = selectedBroadcastingType,
+                                            onTypeSelected = { selectedBroadcastingType = it }
                                         )
                                     }
                                     "ビデオ" -> VideoTabContent(
@@ -299,6 +301,7 @@ fun HomeLauncherScreen(
             }
         }
 
+        // ビデオプレイヤー
         key(selectedProgram?.id) {
             if (selectedProgram != null) {
                 LaunchedEffect(selectedProgram!!.id) {

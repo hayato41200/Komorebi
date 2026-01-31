@@ -27,7 +27,6 @@ class EpgViewModel @Inject constructor(
     private val repository: EpgRepository,
     private val settingsRepository: SettingsRepository // 追加
 ) : ViewModel() {
-
     // import があれば 'by' が正しく機能します
     var uiState by mutableStateOf<EpgUiState>(EpgUiState.Loading)
         private set
