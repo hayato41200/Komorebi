@@ -219,62 +219,80 @@ fun EpgGrid(
     onProgramClick: (EpgProgram) -> Unit,
     firstCellFocusRequester: FocusRequester,
     selectedBroadcastingType: String,
-    tabFocusRequester: FocusRequester // ★追加
+    tabFocusRequester: FocusRequester
 ) {
     val verticalScrollState = rememberScrollState()
-    val horizontalScrollState = rememberScrollState()
+    // 横方向は LazyRow が管理するため ScrollState は不要（または同期用）
     val channelWidth = 150.dp
     val timeColumnWidth = 55.dp
     val headerHeight = 48.dp
     val totalGridWidth = remember(channels.size) { channelWidth * channels.size }
 
     Column(modifier = Modifier.fillMaxSize()) {
+        // --- ヘッダー部分 ---
         Row(modifier = Modifier.fillMaxWidth().zIndex(4f)) {
             DateHeaderBox(baseTime, timeColumnWidth, headerHeight)
-            Row(modifier = Modifier.horizontalScroll(horizontalScrollState)) {
-                channels.forEach { wrapper ->
-                    key(wrapper.channel.id) {
-                        ChannelHeaderCell(wrapper.channel, channelWidth, headerHeight, viewModel.getMirakurunLogoUrl(wrapper.channel))
-                    }
+
+            // チャンネルヘッダーを Lazy 化
+            androidx.compose.foundation.lazy.LazyRow(
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                items(channels.size, key = { channels[it].channel.id }) { index ->
+                    val wrapper = channels[index]
+                    ChannelHeaderCell(
+                        wrapper.channel,
+                        channelWidth,
+                        headerHeight,
+                        viewModel.getMirakurunLogoUrl(wrapper.channel)
+                    )
                 }
             }
         }
 
         Row(modifier = Modifier.fillMaxSize()) {
-            Column(modifier = Modifier.width(timeColumnWidth).fillMaxHeight().background(Color(0xFF111111))
-                .verticalScroll(verticalScrollState).zIndex(2f)) {
+            // 時間軸
+            Column(modifier = Modifier
+                .width(timeColumnWidth)
+                .fillMaxHeight()
+                .background(Color(0xFF111111))
+                .verticalScroll(verticalScrollState)
+                .zIndex(2f)
+            ) {
                 TimeColumnContent(baseTime)
             }
 
-            Box(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .horizontalScroll(horizontalScrollState)
-                    .verticalScroll(verticalScrollState)
-                    .focusGroup()
-            ) {
-                Row {
-                    channels.forEachIndexed { channelIndex, channelWrapper ->
-                        key("${selectedBroadcastingType}_${channelWrapper.channel.id}") {
-                            val programFocusRequesters = remember(channelWrapper.programs.size) {
-                                List(channelWrapper.programs.size) { FocusRequester() }
-                            }
-                            Box(modifier = Modifier.width(channelWidth).height(HOUR_HEIGHT * 24)) {
-                                channelWrapper.programs.forEachIndexed { programIndex, program ->
-                                    CompactProgramCell(
-                                        epgProgram = program,
-                                        baseTime = baseTime,
-                                        width = channelWidth,
-                                        columnIndex = channelIndex,
-                                        totalColumns = channels.size,
-                                        focusRequester = programFocusRequesters[programIndex],
-                                        upRequester = if (programIndex > 0) programFocusRequesters[programIndex - 1] else tabFocusRequester,
-                                        downRequester = if (programIndex < programFocusRequesters.lastIndex) programFocusRequesters[programIndex + 1] else null,
-                                        onProgramClick = onProgramClick,
-                                        modifier = if (channelIndex == 0 && programIndex == 0)
-                                            Modifier.focusRequester(firstCellFocusRequester) else Modifier
-                                    )
-                                }
+            // --- メインの番組表（LazyRowでチャンネル方向を最適化） ---
+            Box(modifier = Modifier.fillMaxSize()) {
+                androidx.compose.foundation.lazy.LazyRow(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .verticalScroll(verticalScrollState) // 縦スクロールを共有
+                        .focusGroup()
+                ) {
+                    items(channels.size, key = { "${selectedBroadcastingType}_${channels[it].channel.id}" }) { channelIndex ->
+                        val channelWrapper = channels[channelIndex]
+
+                        // 各チャンネルの番組リストを生成
+                        // ここでは remember をチャンネル単位で保持
+                        val programFocusRequesters = remember(channelWrapper.programs.size) {
+                            List(channelWrapper.programs.size) { FocusRequester() }
+                        }
+
+                        Box(modifier = Modifier.width(channelWidth).height(HOUR_HEIGHT * 24)) {
+                            channelWrapper.programs.forEachIndexed { programIndex, program ->
+                                CompactProgramCell(
+                                    epgProgram = program,
+                                    baseTime = baseTime,
+                                    width = channelWidth,
+                                    columnIndex = channelIndex,
+                                    totalColumns = channels.size,
+                                    focusRequester = programFocusRequesters[programIndex],
+                                    upRequester = if (programIndex > 0) programFocusRequesters[programIndex - 1] else tabFocusRequester,
+                                    downRequester = if (programIndex < programFocusRequesters.lastIndex) programFocusRequesters[programIndex + 1] else null,
+                                    onProgramClick = onProgramClick,
+                                    modifier = if (channelIndex == 0 && programIndex == 0)
+                                        Modifier.focusRequester(firstCellFocusRequester) else Modifier
+                                )
                             }
                         }
                     }
