@@ -17,7 +17,7 @@ val MyDarkColorScheme = darkColorScheme(
 
 @OptIn(ExperimentalTvMaterial3Api::class)
 @Composable
-fun DTVClientTheme(
+fun KomorebiTheme(
     isInDarkTheme: Boolean = isSystemInDarkTheme(),
     content: @Composable () -> Unit,
 ) {

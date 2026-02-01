@@ -26,6 +26,7 @@ import androidx.compose.ui.zIndex
 import androidx.tv.material3.*
 import com.example.komorebi.data.model.EpgProgram
 import com.example.komorebi.data.util.EpgUtils
+import com.example.komorebi.ui.theme.NotoSansJP
 
 @RequiresApi(Build.VERSION_CODES.O)
 @OptIn(ExperimentalTvMaterial3Api::class)
@@ -51,7 +52,7 @@ fun ProgramDetailModal(
     }
 
     val forcedJapanStyle = TextStyle(
-        fontFamily = FontFamily.SansSerif,
+        fontFamily = NotoSansJP,
         fontWeight = FontWeight.Medium,
         platformStyle = PlatformTextStyle(includeFontPadding = false)
     )
@@ -93,13 +94,13 @@ fun ProgramDetailModal(
                         Spacer(modifier = Modifier.height(16.dp))
                         Text(
                             text = program.title,
-                            style = TextStyle(fontSize = 32.sp, fontWeight = FontWeight.Bold, lineHeight = 42.sp),
+                            style = forcedJapanStyle.copy(fontSize = 32.sp, fontWeight = FontWeight.Bold, lineHeight = 42.sp),
                             color = Color.White
                         )
                         Spacer(modifier = Modifier.height(12.dp))
                         Text(
                             text = "${EpgUtils.formatTime(program.start_time)} 〜 ${EpgUtils.formatEndTime(program)}",
-                            style = TextStyle(fontSize = 18.sp, color = Color.LightGray)
+                            style = forcedJapanStyle.copy(fontSize = 18.sp, color = Color.LightGray)
                         )
 
                         Spacer(modifier = Modifier.weight(1f))
@@ -113,7 +114,10 @@ fun ProgramDetailModal(
                                 colors = ButtonDefaults.colors(containerColor = Color.White, contentColor = Color.Black),
                                 shape = ButtonDefaults.shape(RoundedCornerShape(8.dp))
                             ) {
-                                Text("視聴する", fontWeight = FontWeight.Bold)
+                                Text(
+                                    text = "視聴する",
+                                    style = forcedJapanStyle.copy(fontWeight = FontWeight.Bold)
+                                )
                             }
 
                             Spacer(modifier = Modifier.width(20.dp))
@@ -134,7 +138,7 @@ fun ProgramDetailModal(
                                 colors = ButtonDefaults.colors(containerColor = Color.Transparent, contentColor = Color.White),
                                 shape = ButtonDefaults.shape(RoundedCornerShape(8.dp))
                             ) {
-                                Text("戻る", fontWeight = FontWeight.Bold)
+                                Text(text = "戻る", style = forcedJapanStyle.copy(fontWeight = FontWeight.Bold))
                             }
                         }
                     }
@@ -143,7 +147,7 @@ fun ProgramDetailModal(
 
                     // --- 右カラム ---
                     Column(modifier = Modifier.weight(1.3f)) {
-                        Text(text = "番組詳細", style = TextStyle(fontSize = 14.sp, color = Color.Gray, letterSpacing = 2.sp))
+                        Text(text = "番組詳細", style = forcedJapanStyle.copy(fontSize = 14.sp, color = Color.Gray, letterSpacing = 2.sp))
                         Spacer(modifier = Modifier.height(20.dp))
 
                         Surface(

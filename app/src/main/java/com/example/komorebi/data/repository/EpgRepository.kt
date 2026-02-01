@@ -35,13 +35,13 @@ class EpgRepository @Inject constructor(
         suspend fun fetchEpgData(
             startTime: OffsetDateTime,
             channelType: String? = null,
-            days: Long = 1
+            days: Long
         ): Result<List<EpgChannelWrapper>> {
             return try {
                 // ISO8601形式でフォーマット
                 val formatter = DateTimeFormatter.ISO_OFFSET_DATE_TIME
                 val startStr = startTime.format(formatter)
-                val endStr = startTime.plusHours(12).format(formatter) // 最初は「6時間分」などでテスト
+                val endStr = startTime.plusDays(days).format(formatter) // 最初は「6時間分」などでテスト
 
                 val response = apiService.getEpgPrograms(
                     startTime = startStr,

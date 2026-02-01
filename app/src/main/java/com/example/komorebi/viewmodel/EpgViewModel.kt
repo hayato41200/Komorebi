@@ -51,26 +51,26 @@ class EpgViewModel @Inject constructor(
             mirakurunBaseUrl = "http://$ip:$port"
             currentBaseUrl = settingsRepository.getBaseUrl().removeSuffix("/")
             // ★ ベースURLが確定したら即座に読み込み開始
-            loadEpg()
+            loadEpg(1)
         }
     }
 
     @RequiresApi(Build.VERSION_CODES.O)
-    fun loadEpg() {
+    fun loadEpg(days: Long) {
         viewModelScope.launch {
             uiState = EpgUiState.Loading
 // 現在時刻をそのまま取得（秒以下を0にするとリクエストURLが綺麗になります）
-            val now = OffsetDateTime.now().withSecond(0).withNano(0)
+//            val now = OffsetDateTime.now().withSecond(0).withNano(0)
 
             // ヒント: 現在放送中の番組をしっかり表示したい場合は、
             // 30分前（.minusMinutes(30)）から取得するのが一般的です
-            val baseTime = now.minusMinutes(30)
+            val baseTime = OffsetDateTime.now().withMinute(0).withSecond(0).withNano(0)
 
             // fetchEpgData に渡す
             val result = repository.fetchEpgData(
                 startTime = baseTime,
                 channelType = null, // 明示的にnullを渡す（全取得）
-                days = 1
+                days = days
             )
 
             uiState = result.fold(

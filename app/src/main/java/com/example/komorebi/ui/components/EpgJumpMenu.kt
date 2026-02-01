@@ -22,6 +22,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.tv.material3.*
+import androidx.tv.material3.MaterialTheme.typography
 import kotlinx.coroutines.delay
 import java.time.OffsetDateTime
 import java.time.format.DateTimeFormatter
@@ -74,7 +75,7 @@ fun EpgJumpMenu(
             ) {
                 Text(
                     text = "表示日時の指定",
-                    style = MaterialTheme.typography.titleLarge,
+                    style = typography.titleLarge,
                     modifier = Modifier.padding(bottom = 16.dp),
                     color = Color.Cyan
                 )

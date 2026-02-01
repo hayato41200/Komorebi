@@ -1,30 +1,29 @@
 package com.example.komorebi.ui.theme
 
-import androidx.compose.ui.text.TextStyle
-import androidx.compose.ui.text.font.FontFamily
-import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.text.intl.LocaleList // これを追加
-import androidx.compose.ui.unit.sp
 import androidx.tv.material3.Typography
+import androidx.compose.ui.text.TextStyle
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.unit.sp
 
 val AppTypography = Typography(
-    headlineMedium = TextStyle(
-        fontFamily = FontFamily.SansSerif,
-        fontWeight = FontWeight.Black,
-        fontSize = 28.sp,
-        // ★ 日本語ロケールを明示的に指定することで、中華フォント化を防ぎます
-        localeList = LocaleList("ja-JP")
-    ),
-    titleMedium = TextStyle(
-        fontFamily = FontFamily.SansSerif,
-        fontWeight = FontWeight.Bold,
-        fontSize = 18.sp,
-        localeList = LocaleList("ja-JP")
-    ),
-    bodyMedium = TextStyle(
-        fontFamily = FontFamily.SansSerif,
-        fontWeight = FontWeight.Normal,
-        fontSize = 16.sp,
-        localeList = LocaleList("ja-JP")
-    )
+    // Google TVのような外観にするため、各スタイルにフォントを指定
+    displayLarge = TextStyle(fontFamily = NotoSansJP, fontWeight = FontWeight.Normal),
+    displayMedium = TextStyle(fontFamily = NotoSansJP, fontWeight = FontWeight.Normal),
+    displaySmall = TextStyle(fontFamily = NotoSansJP, fontWeight = FontWeight.Normal),
+
+    headlineLarge = TextStyle(fontFamily = NotoSansJP, fontWeight = FontWeight.Bold),
+    headlineMedium = TextStyle(fontFamily = NotoSansJP, fontWeight = FontWeight.Bold),
+    headlineSmall = TextStyle(fontFamily = NotoSansJP, fontWeight = FontWeight.Bold),
+
+    titleLarge = TextStyle(fontFamily = NotoSansJP, fontWeight = FontWeight.Bold, fontSize = 22.sp),
+    titleMedium = TextStyle(fontFamily = NotoSansJP, fontWeight = FontWeight.Medium, fontSize = 16.sp),
+    titleSmall = TextStyle(fontFamily = NotoSansJP, fontWeight = FontWeight.Medium, fontSize = 14.sp),
+
+    bodyLarge = TextStyle(fontFamily = NotoSansJP, fontWeight = FontWeight.Normal, fontSize = 16.sp),
+    bodyMedium = TextStyle(fontFamily = NotoSansJP, fontWeight = FontWeight.Normal, fontSize = 14.sp),
+    bodySmall = TextStyle(fontFamily = NotoSansJP, fontWeight = FontWeight.Normal, fontSize = 12.sp),
+
+    labelLarge = TextStyle(fontFamily = NotoSansJP, fontWeight = FontWeight.Medium, fontSize = 14.sp),
+    labelMedium = TextStyle(fontFamily = NotoSansJP, fontWeight = FontWeight.Medium, fontSize = 12.sp),
+    labelSmall = TextStyle(fontFamily = NotoSansJP, fontWeight = FontWeight.Medium, fontSize = 11.sp)
 )

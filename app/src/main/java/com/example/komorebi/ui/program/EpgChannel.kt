@@ -38,6 +38,7 @@ fun EpgScreen(
     viewModel: EpgViewModel,
     topTabFocusRequester: FocusRequester,
     tabFocusRequester: FocusRequester,
+    onBroadcastingTabFocusChanged: (Boolean) -> Unit = {}, // ★ 追加
     firstCellFocusRequester: FocusRequester,
     selectedProgram: EpgProgram?,
     onProgramSelected: (EpgProgram?) -> Unit,
@@ -73,6 +74,7 @@ fun EpgScreen(
                 selectedType = selectedBroadcastingType,
                 onTypeSelected = onTypeSelected,
                 tabFocusRequester = tabFocusRequester,
+                onFocusChanged = onBroadcastingTabFocusChanged, // ★ そのまま渡す
                 firstCellFocusRequester = firstCellFocusRequester,
                 categories = categories
             )
@@ -123,6 +125,7 @@ fun BroadcastingTypeTabs(
     selectedType: String,
     onTypeSelected: (String) -> Unit,
     tabFocusRequester: FocusRequester,
+    onFocusChanged: (Boolean) -> Unit, // ★ 追加
     firstCellFocusRequester: FocusRequester,
     categories: List<String>
 ) {
@@ -140,8 +143,11 @@ fun BroadcastingTypeTabs(
                 .size(0.dp) // 画面には見えない
                 .focusRequester(tabFocusRequester) // 戻るキーのターゲットはここ
                 .onFocusChanged {
+                    // ★ 親に「タブエリアにフォーカスがあるか」を伝える
+                    // isFocused: このBox自体, hasFocus: 中の実際のタブ
+                    onFocusChanged(it.isFocused || it.hasFocus)
+
                     if (it.isFocused) {
-                        // ここがフォーカスを得たら、即座に選択中の本物のタブへ転送
                         focusRequesters[selectedType]?.requestFocus()
                     }
                 }
@@ -153,7 +159,12 @@ fun BroadcastingTypeTabs(
                 .fillMaxWidth()
                 .height(44.dp)
                 .background(Color.Black)
-                .focusGroup(), // Row全体へのfocusRequester付与はやめる
+                .focusGroup() // Row全体へのfocusRequester付与はやめる
+            // ★ 2. Row全体（中のタブを含む）のフォーカス状態を監視
+            .onFocusChanged {
+            // タブのどれかにフォーカスがある間、親(HomeLauncherScreen)に true を送り続ける
+            onFocusChanged(it.isFocused || it.hasFocus)
+        },
             horizontalArrangement = Arrangement.Center,
             verticalAlignment = Alignment.CenterVertically
         ) {
@@ -293,17 +304,29 @@ fun CompactProgramCell(
         val endTime = startTime.plusSeconds(epgProgram.duration.toLong())
         val minutesFromBase = Duration.between(baseTime, startTime).toMinutes()
         val durationMin = epgProgram.duration / 60
+        val topOffset = if (minutesFromBase < 0) 0.dp else (minutesFromBase * DP_PER_MINUTE).dp
+        val isVisible = endTime.isAfter(baseTime) && minutesFromBase < 1440
+        val adjustedHeight = if (minutesFromBase < 0) {
+            ((durationMin + minutesFromBase) * DP_PER_MINUTE).dp
+        } else {
+            (durationMin * DP_PER_MINUTE).dp
+        }
+
+        // ★ 追加: 拡大が必要かどうかの判定 (70dp以下なら拡大対象)
+        val needsExpansion = adjustedHeight < 70.dp
+
         object {
-            val top = (minutesFromBase * DP_PER_MINUTE).dp
-            val height = (durationMin * DP_PER_MINUTE).dp
-            val isVisible = endTime.isAfter(baseTime)
+            val top = topOffset
+            val height = adjustedHeight
+            val isVisible = isVisible
             val isPast = endTime.isBefore(OffsetDateTime.now())
             val startTimeStr = EpgUtils.formatTime(epgProgram.start_time)
             val genreColor = EpgUtils.getGenreColor(epgProgram.majorGenre)
+            val needsExpansion = needsExpansion
         }
     }
 
-    if (!cellData.isVisible) return
+    if (!cellData.isVisible || cellData.height <= 0.dp) return
     var isFocused by remember { mutableStateOf(false) }
 
     Box(
@@ -321,17 +344,18 @@ fun CompactProgramCell(
             .focusable()
             .clickable { onProgramClick(epgProgram) }
             .layout { measurable, constraints ->
-                // フォーカス時に拡大する高さ
-                val expandedHeight = if (isFocused) 110.dp.roundToPx() else cellData.height.roundToPx()
-                val placeable = measurable.measure(constraints.copy(minHeight = expandedHeight, maxHeight = expandedHeight))
+                // ★ 修正: 「フォーカス中」かつ「高さが足りない」場合のみ拡大する
+                val expandedHeight = if (isFocused && cellData.needsExpansion) {
+                    110.dp.roundToPx()
+                } else {
+                    cellData.height.roundToPx()
+                }
 
-                // グリッド上の本来の高さ
+                val placeable = measurable.measure(constraints.copy(minHeight = expandedHeight, maxHeight = expandedHeight))
                 val reportHeight = if (cellData.top < 0.dp) (cellData.height + cellData.top).coerceAtLeast(0.dp).roundToPx() else cellData.height.roundToPx()
 
                 layout(placeable.width, reportHeight) {
                     val yOffset = if (isFocused && expandedHeight > reportHeight) {
-                        // 本来は上下に均等に広げたいが、上端(cellData.top)が0に近い場合は、
-                        // チャンネルヘッダーを突き抜けないようにyOffsetの下限を制限する
                         val idealOffset = -(expandedHeight - reportHeight) / 2
                         val topLimit = if (cellData.top > 0.dp) -cellData.top.roundToPx() else 0
                         idealOffset.coerceAtLeast(topLimit)
@@ -353,19 +377,55 @@ fun CompactProgramCell(
     ) {
         Column(modifier = Modifier.padding(start = 6.dp, top = 2.dp, end = 4.dp)) {
             val textAlpha = if (cellData.isPast) 0.5f else 1.0f
-            androidx.compose.material3.Text(text = cellData.startTimeStr, fontSize = 9.sp, color = Color.LightGray.copy(alpha = textAlpha))
+
+            // 開始時間
+            androidx.compose.material3.Text(
+                text = cellData.startTimeStr,
+                style = MaterialTheme.typography.labelSmall.copy(
+                    fontSize = 9.sp,
+                    color = Color.LightGray.copy(alpha = textAlpha)
+                )
+            )
+
+            // 番組タイトル
             androidx.compose.material3.Text(
                 text = epgProgram.title,
-                fontSize = 11.sp,
-                color = Color.White.copy(alpha = textAlpha),
-                fontWeight = if (isFocused) FontWeight.Bold else FontWeight.SemiBold,
-                maxLines = if (isFocused) 2 else if (cellData.height > 35.dp) 2 else 1,
+                style = MaterialTheme.typography.bodySmall.copy(
+                    fontSize = 11.sp,
+                    color = Color.White.copy(alpha = textAlpha),
+                    fontWeight = if (isFocused) FontWeight.Bold else FontWeight.SemiBold,
+                    lineHeight = 13.sp
+                ),
+                // 高さが極端に低い場合以外は2行表示
+                maxLines = if (cellData.height > 30.dp || isFocused) 2 else 1,
                 overflow = TextOverflow.Ellipsis,
-                lineHeight = 13.sp
             )
-            if (isFocused && epgProgram.description.isNotEmpty()) {
-                Spacer(modifier = Modifier.height(4.dp))
-                androidx.compose.material3.Text(text = epgProgram.description, fontSize = 10.sp, color = Color.LightGray, maxLines = 3, overflow = TextOverflow.Ellipsis, lineHeight = 12.sp)
+
+            // ★ 番組概要（最初から表示）
+            if (epgProgram.description.isNotEmpty()) {
+                // セルの高さに応じて表示行数を動的に決定（フォーカス時は拡大するので最大4行）
+                val descMaxLines = when {
+                    isFocused && cellData.needsExpansion -> 4
+                    cellData.height > 90.dp -> 4
+                    cellData.height > 70.dp -> 3
+                    cellData.height > 50.dp -> 2
+                    cellData.height > 40.dp -> 1
+                    else -> 0 // 非常に短い番組は非表示（フォーカス時に拡大して表示される）
+                }
+
+                if (descMaxLines > 0) {
+                    Spacer(modifier = Modifier.height(2.dp))
+                    androidx.compose.material3.Text(
+                        text = epgProgram.description,
+                        style = MaterialTheme.typography.bodySmall.copy(
+                            fontSize = 10.sp,
+                            color = Color.LightGray.copy(alpha = textAlpha * 0.8f), // 概要は少し薄く
+                            lineHeight = 12.sp
+                        ),
+                        maxLines = descMaxLines,
+                        overflow = TextOverflow.Ellipsis,
+                    )
+                }
             }
         }
     }
@@ -387,9 +447,27 @@ fun ChannelHeaderCell(channel: EpgChannel, width: Dp, height: Dp, logoUrl: Strin
             Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.Center) {
                 AsyncImage(model = logoUrl, contentDescription = null, contentScale = ContentScale.Fit, modifier = Modifier.size(width = 32.dp, height = 18.dp).clip(RoundedCornerShape(2.dp)))
                 Spacer(modifier = Modifier.width(6.dp))
-                androidx.compose.material3.Text(text = channel.channel_number ?: "", color = Color.White, fontSize = 17.sp, fontWeight = FontWeight.Black)
+                androidx.compose.material3.Text(
+                    text = channel.channel_number ?: "",
+                    style = MaterialTheme.typography.titleLarge.copy( // bodySmall 等を使用
+                        fontSize = 18.sp,
+                        color = Color.White,
+                        fontWeight = FontWeight.Black,
+                        lineHeight = 12.sp
+                    ),
+                )
             }
-            androidx.compose.material3.Text(text = channel.name, color = Color.LightGray, fontSize = 9.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
+            androidx.compose.material3.Text(
+                text = channel.name,
+                style = MaterialTheme.typography.bodySmall.copy( // bodySmall 等を使用
+                    color = Color.LightGray,
+                    fontSize = 9.sp,
+                ),
+                color = Color.LightGray,
+                fontSize = 9.sp,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis
+            )
         }
     }
 }

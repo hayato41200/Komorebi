@@ -269,7 +269,7 @@ fun LiveOverlayUI(channel: Channel, programTitle: String, mirakurunIp: String, m
                 AsyncImage(model = "http://$mirakurunIp:$mirakurunPort/api/services/${buildStreamId(channel)}/logo", contentDescription = null, modifier = Modifier.size(80.dp, 45.dp).clip(RoundedCornerShape(4.dp)).background(Color.White), contentScale = ContentScale.Fit)
                 Spacer(Modifier.width(20.dp)); Text("${formatChannelType(channel.type)}${channel.channelNumber}  ${channel.name}", style = MaterialTheme.typography.headlineSmall, color = Color.White.copy(0.9f))
             }
-            Text(programTitle, style = MaterialTheme.typography.headlineMedium.copy(fontWeight = FontWeight.Bold), color = Color.White, modifier = Modifier.padding(vertical = 12.dp))
+            Text(programTitle, style = MaterialTheme.typography.titleLarge.copy(fontWeight = FontWeight.Bold), color = Color.White, modifier = Modifier.padding(vertical = 12.dp))
 
             if (showDesc && program != null) {
                 Box(modifier = Modifier.fillMaxWidth().heightIn(max = 280.dp).padding(vertical = 8.dp)) {
