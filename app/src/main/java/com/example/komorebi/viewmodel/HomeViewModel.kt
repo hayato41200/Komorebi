@@ -1,8 +1,11 @@
 package com.example.komorebi.viewmodel
 
+import android.os.Build
+import androidx.annotation.RequiresApi
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.example.komorebi.data.local.entity.toEntity
+import com.example.komorebi.data.local.entity.toKonomiHistoryProgram
 import com.example.komorebi.data.model.KonomiHistoryProgram
 import com.example.komorebi.data.model.RecordedProgram
 import com.example.komorebi.data.repository.KonomiRepository
@@ -11,58 +14,73 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 import javax.inject.Inject
 
-@HiltViewModel // ★これを追加
-class HomeViewModel @Inject constructor( // ★@Inject を追加
+@HiltViewModel
+class HomeViewModel @Inject constructor(
     private val repository: KonomiRepository
 ) : ViewModel() {
-
-    // 視聴履歴のライブデータ
-    private val _watchHistory = MutableStateFlow<List<KonomiHistoryProgram>>(emptyList())
-    val watchHistory: StateFlow<List<KonomiHistoryProgram>> = _watchHistory.asStateFlow()
 
     // 読み込み状態の管理
     private val _isLoading = MutableStateFlow(false)
     val isLoading: StateFlow<Boolean> = _isLoading.asStateFlow()
 
+    /**
+     * 単一の真実のソース (Single Source of Truth)
+     * ローカルDBを監視し、常に最新の履歴（API由来 + ローカル由来）をUIへ流します。
+     */
+    @RequiresApi(Build.VERSION_CODES.O)
+    val watchHistory: StateFlow<List<KonomiHistoryProgram>> = repository.getLocalWatchHistory()
+        .map { entities ->
+            entities.map { it.toKonomiHistoryProgram() }
+        }
+        .stateIn(
+            scope = viewModelScope,
+            started = SharingStarted.WhileSubscribed(5000),
+            initialValue = emptyList()
+        )
+
     init {
-        // 初回起動時にデータを取得
+        // 初回起動時にデータを同期
         refreshHomeData()
     }
 
     /**
-     * サーバーから最新の履歴とユーザー設定を取得する
+     * サーバーから最新の履歴を取得し、ローカルDBを更新する
+     * DBが更新されると、上記の watchHistory Flow が自動的に発火してUIが変わります。
      */
     fun refreshHomeData() {
         viewModelScope.launch {
             _isLoading.value = true
 
-            // 履歴の取得
-            val result = repository.getWatchHistory()
-            result.onSuccess { history ->
-                _watchHistory.value = history
+            // APIから履歴を取得
+            repository.getWatchHistory().onSuccess { apiHistoryList ->
+                // APIから取得できた場合、それらをローカルDBに保存（API優先の同期）
+                apiHistoryList.forEach { history ->
+                    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                        repository.saveToLocalHistory(history.toEntity())
+                    }
+                }
             }.onFailure {
-                // 必要に応じてエラーログ
+                // APIエラー時はDBにある既存のデータがそのまま使われるため、何もしなくてOK
             }
 
-            // ユーザー設定（ピン留め等）も更新しておく
+            // ユーザー設定の更新
             repository.refreshUser()
 
             _isLoading.value = false
         }
     }
 
-    // 1. ローカルDBの履歴を監視するFlowを公開
-    val localWatchHistory = repository.getLocalWatchHistory()
-        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
-
-    // 2. 保存用メソッド
+    /**
+     * 番組視聴時にローカルDBへ保存する
+     */
     fun saveToHistory(program: RecordedProgram) {
         viewModelScope.launch {
-            repository.saveToLocalHistory(program.toEntity()) // toEntity()はEntityクラスで作った変換関数
+            repository.saveToLocalHistory(program.toEntity())
         }
     }
 }

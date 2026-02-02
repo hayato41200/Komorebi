@@ -3,6 +3,7 @@ package com.example.komorebi.ui.home
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.remember
@@ -28,43 +29,37 @@ fun VideoTabContent(
     externalFocusRequester: FocusRequester,
     onProgramClick: (RecordedProgram) -> Unit
 ) {
-    // ★ 最初のカードにフォーカスを当てるためのリクエスター
-    val firstItemFocusRequester = remember { FocusRequester() }
-
-    // 縦スクロール（新着、履歴、マイリストの各行を並べる）
-    // ★ データがロードされたら最初のアイテムにフォーカスを移す
-    LaunchedEffect(recentRecordings) {
-        if (recentRecordings.isNotEmpty()) {
-            firstItemFocusRequester.requestFocus()
-        }
-    }
-
-    TvLazyColumn(
-        modifier = Modifier.fillMaxSize(),
-        contentPadding = PaddingValues(bottom = 32.dp),
+    // TvLazyColumn ではなく標準の LazyColumn を使い、
+    // 各行（Row）に FocusRequester を持たせる構成が最も安定します
+    LazyColumn(
+        modifier = Modifier
+            .fillMaxSize()
+            .focusRequester(externalFocusRequester),
+        contentPadding = PaddingValues(top = 24.dp, bottom = 32.dp),
         verticalArrangement = Arrangement.spacedBy(32.dp)
     ) {
-        // 新着録画セクション
+        // 新着録画
         item {
             RecordedSection(
                 title = "新着の録画",
                 items = recentRecordings,
                 konomiIp = konomiIp,
                 konomiPort = konomiPort,
-                onProgramClick = onProgramClick,
-                firstItemFocusRequester = externalFocusRequester
+                onProgramClick = onProgramClick
             )
         }
 
-        // 視聴履歴セクション（ダミー）
-        item {
-            RecordedSection(
-                title = "視聴履歴",
-                items = watchHistory, // ViewModelから取得した履歴リスト
-                konomiIp = konomiIp,
-                konomiPort = konomiPort,
-                onProgramClick = onProgramClick
-            )
+        // 視聴履歴（データがある場合のみ）
+        if (watchHistory.isNotEmpty()) {
+            item {
+                RecordedSection(
+                    title = "視聴履歴",
+                    items = watchHistory,
+                    konomiIp = konomiIp,
+                    konomiPort = konomiPort,
+                    onProgramClick = onProgramClick
+                )
+            }
         }
     }
 }
@@ -89,14 +84,14 @@ fun RecordedSection(
 
         TvLazyRow(
             contentPadding = PaddingValues(horizontal = 32.dp),
-            horizontalArrangement = Arrangement.spacedBy(16.dp),
+            horizontalArrangement = Arrangement.spacedBy(12.dp),
             modifier = Modifier.graphicsLayer(clip = false) // 拡大時の見切れ防止
         ) {
             if (isPlaceholder) {
-                items(5) {
+                items(6) {
                     Box(
                         Modifier
-                            .size(240.dp, 135.dp)
+                            .size(185.dp, 104.dp)
                             .background(Color.White.copy(alpha = 0.1f), MaterialTheme.shapes.medium) // 角を少し丸く、色は薄く
                     )
                 }

@@ -95,8 +95,8 @@ dependencies {
     implementation("org.jellyfin.media3:media3-ffmpeg-decoder:1.5.0+1")
 
     // --- 不足分：TV用 Material3 (ChannelListなどで使用) ---
-    implementation("androidx.tv:tv-material:1.0.0-rc02")
-    implementation("androidx.tv:tv-foundation:1.0.0-alpha10")
+    implementation("androidx.tv:tv-material:1.0.0-alpha11")
+    implementation("androidx.tv:tv-foundation:1.0.0-alpha11")
 
     // Room (ここがクラッシュの原因箇所)
     val room_version = "2.7.0"

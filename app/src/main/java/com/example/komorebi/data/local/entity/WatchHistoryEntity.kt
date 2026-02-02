@@ -1,24 +1,31 @@
 package com.example.komorebi.data.local.entity
 
+import android.os.Build
+import androidx.annotation.RequiresApi
 import androidx.room.Entity
 import androidx.room.PrimaryKey
+import com.example.komorebi.data.model.KonomiHistoryProgram
+import com.example.komorebi.data.model.KonomiProgram
 import com.example.komorebi.data.model.RecordedProgram
 import com.example.komorebi.data.model.RecordedVideo
+import java.time.format.DateTimeFormatter
+import java.time.Instant
 
 @Entity(tableName = "watch_history")
 data class WatchHistoryEntity(
-    @PrimaryKey val id: Int, // RecordedProgram.id
+    @PrimaryKey val id: Int,
     val title: String,
     val description: String,
     val startTime: String,
     val endTime: String,
     val duration: Double,
     val videoId: Int,
-    val watchedAt: Long = System.currentTimeMillis() // 履歴の並び替え用
+    val playbackPosition: Double = 0.0,
+    val watchedAt: Long = System.currentTimeMillis()
 )
 
 /**
- * RecordedProgram (APIモデル) から WatchHistoryEntity (DBエンティティ) への変換
+ * ローカルで再生した RecordedProgram を DB に保存する際の変換
  */
 fun RecordedProgram.toEntity(): WatchHistoryEntity {
     return WatchHistoryEntity(
@@ -34,8 +41,26 @@ fun RecordedProgram.toEntity(): WatchHistoryEntity {
 }
 
 /**
- * WatchHistoryEntity (DBエンティティ) から RecordedProgram (APIモデル) への変換
- * UIコンポーネント（RecordedCardなど）で再利用するために使用します。
+ * DBから読み出したデータをUI（HomeContents）に表示するための変換
+ */
+@RequiresApi(Build.VERSION_CODES.O)
+fun WatchHistoryEntity.toKonomiHistoryProgram(): KonomiHistoryProgram {
+    return KonomiHistoryProgram(
+        playback_position = this.playbackPosition,
+        last_watched_at = DateTimeFormatter.ISO_INSTANT.format(Instant.ofEpochMilli(this.watchedAt)),
+        program = KonomiProgram(
+            id = this.videoId.toString(),
+            title = this.title,
+            description = this.description,
+            start_time = this.startTime,
+            end_time = this.endTime,
+            channel_id = ""
+        )
+    )
+}
+
+/**
+ * DBから読み出したデータを再生画面に直接渡す際の変換
  */
 fun WatchHistoryEntity.toRecordedProgram(): RecordedProgram {
     return RecordedProgram(
@@ -45,17 +70,16 @@ fun WatchHistoryEntity.toRecordedProgram(): RecordedProgram {
         startTime = this.startTime,
         endTime = this.endTime,
         duration = this.duration,
-        // RecordedVideoオブジェクトをDB保存時のIDを用いて再構成
+        isPartiallyRecorded = false,
         recordedVideo = RecordedVideo(
             id = this.videoId,
-            filePath = "", // 履歴表示には不要なため空文字
-            recordingStartTime = this.startTime, // 番組の開始時間を流用
-            recordingEndTime = this.endTime,     // 番組の終了時間を流用
+            filePath = "",
+            recordingStartTime = this.startTime,
+            recordingEndTime = this.endTime,
             duration = this.duration,
             containerFormat = "",
             videoCodec = "",
             audioCodec = ""
-        ),
-        isPartiallyRecorded = false
+        )
     )
 }

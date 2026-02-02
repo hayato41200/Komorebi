@@ -38,6 +38,8 @@ class MainActivity : ComponentActivity() {
 
     private val viewModel: ChannelViewModel by viewModels()
     private val epgViewModel: EpgViewModel by viewModels() // ★追加
+    private val channelViewModel: ChannelViewModel by viewModels()
+
 
     @RequiresApi(Build.VERSION_CODES.O)
     @OptIn(ExperimentalTvMaterial3Api::class)
@@ -47,6 +49,7 @@ class MainActivity : ComponentActivity() {
         // 両方のデータをフェッチ開始
         viewModel.fetchChannels()
         epgViewModel.preloadAllEpgData() // ★番組表のプリロード開始
+        channelViewModel.fetchRecentRecordings()
 
         setContent {
             KomorebiTheme {
@@ -79,13 +82,6 @@ class MainActivity : ComponentActivity() {
                 val konomiIp by repository.konomiIp.collectAsState(initial = "https://192-168-100-60.local.konomi.tv")
                 val konomiPort by repository.konomiPort.collectAsState(initial = "7000")
 
-//                BackHandler(enabled = true) {
-//                    when {
-//                        isPlayerMode -> isPlayerMode = false
-//                        isSettingsMode -> isSettingsMode = false
-//                        else -> showExitDialog = true
-//                    }
-//                }
                 // 再生中かどうかでBackHandlerの挙動を変える
                 BackHandler(enabled = true) {
                     if (isPlayerMode) {

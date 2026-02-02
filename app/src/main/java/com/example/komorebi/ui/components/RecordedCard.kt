@@ -37,11 +37,11 @@ fun RecordedCard(
     Surface(
         onClick = onClick,
         modifier = modifier
-            .width(240.dp)
-            .height(135.dp)
+            .width(185.dp)
+            .height(104.dp)
             .onFocusChanged { isFocused = it.isFocused },
         shape = ClickableSurfaceDefaults.shape(MaterialTheme.shapes.medium),
-        scale = ClickableSurfaceDefaults.scale(focusedScale = 1.1f),
+        scale = ClickableSurfaceDefaults.scale(focusedScale = 1.05f),
         colors = ClickableSurfaceDefaults.colors(
             containerColor = Color.DarkGray.copy(alpha = 0.4f),
             focusedContainerColor = Color.White

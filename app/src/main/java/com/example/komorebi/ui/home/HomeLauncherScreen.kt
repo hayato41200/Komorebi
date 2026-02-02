@@ -23,7 +23,6 @@ import androidx.compose.ui.focus.focusProperties
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
@@ -31,7 +30,6 @@ import androidx.compose.ui.unit.sp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.tv.material3.*
-import com.example.komorebi.data.local.entity.toRecordedProgram
 import com.example.komorebi.data.model.EpgProgram
 import com.example.komorebi.data.model.KonomiHistoryProgram
 import com.example.komorebi.data.model.RecordedProgram
@@ -87,68 +85,55 @@ fun HomeLauncherScreen(
 
     val activity = (LocalContext.current as? Activity)
 
-    // --- データ購読 ---
+    // --- データ購読 (Single Source of Truth) ---
     val recentRecordings by channelViewModel.recentRecordings.collectAsState()
-    val watchHistory by homeViewModel.watchHistory.collectAsState(initial = emptyList())
-    val watchHistoryEntities by homeViewModel.localWatchHistory.collectAsState()
-    val watchHistoryPrograms = remember(watchHistoryEntities) {
-        watchHistoryEntities.map { it.toRecordedProgram() }
+
+    // ViewModel側でAPIとLocalDBが統合されたFlowを購読
+    val watchHistory by homeViewModel.watchHistory.collectAsState()
+
+    // ビデオタブ等の RecordedProgram 型を期待するコンポーネント用
+    val watchHistoryPrograms = remember(watchHistory) {
+        watchHistory.map { it.toRecordedProgram() }
     }
 
-    // ★ 描画安定化ロジックの軽量化
+    // 描画安定化ロジック
     LaunchedEffect(Unit) {
         isVisible = true
-        delay(300) // 2秒から大幅短縮。TV向けにはこれくらいで十分
+        delay(300)
         onUiReady()
         delay(200)
         tabFocusRequesters[selectedTabIndex].requestFocus()
     }
 
+    // バックハンドラー (ロジック維持)
     BackHandler(enabled = true) {
-        // ログを出してデバッグすると、ここが2回走っていないか確認できます
-        println("DEBUG: Back Pressed. epgSelectedProgram: ${epgSelectedProgram != null}")
-
         when {
-            // A. 番組詳細が開いているなら、詳細を閉じる「だけ」で終了
             epgSelectedProgram != null -> {
                 isSuppressingTabChange = true
                 epgSelectedProgram = null
-
                 scope.launch {
-                    // 確実に詳細が消えてからフォーカスを戻す
                     delay(100)
                     epgFirstCellFocusRequester.requestFocus()
                     delay(400)
                     isSuppressingTabChange = false
                 }
-                // when文なので、ここで処理は止まり、下の「ホームに戻る」は実行されません
             }
-
-            // B. プレイヤーが開いているならプレイヤーを閉じる
             selectedProgram != null -> {
                 selectedProgram = null
                 homeViewModel.refreshHomeData()
             }
-
-            // C. 番組表タブの中にいる場合の挙動
             selectedTabIndex == 2 -> {
                 if (tabRowHasFocus) {
-                    // タブにフォーカスがあるならホームへ
                     selectedTabIndex = 0
                     tabFocusRequesters[0].requestFocus()
                 } else {
-                    // コンテンツ（番組表内）にいるなら上部タブへフォーカスを戻す
                     tabFocusRequesters[2].requestFocus()
                 }
             }
-
-            // D. その他のタブならホームへ
             selectedTabIndex != 0 -> {
                 selectedTabIndex = 0
                 tabFocusRequesters[0].requestFocus()
             }
-
-            // E. 最後にアプリ終了確認
             else -> {
                 showExitDialog = true
             }
@@ -189,7 +174,6 @@ fun HomeLauncherScreen(
                                     .onFocusChanged { state ->
                                         if (state.isFocused) {
                                             focusedTabIndex = index
-                                            // ★ 抑制フラグだけでなく、「詳細画面が非表示であること」を条件に加える
                                             if (!isSuppressingTabChange && epgSelectedProgram == null) {
                                                 selectedTabIndex = index
                                             }
@@ -228,19 +212,23 @@ fun HomeLauncherScreen(
                     }
                 }
 
-                // --- コンテンツエリア (表示のみに絞り、かつ状態は保持する) ---
+                // --- コンテンツエリア ---
                 Box(modifier = Modifier.fillMaxSize().padding(top = 4.dp)) {
-                    // ホーム
                     if (selectedTabIndex == 0) {
-                        HistoryRow(
-                            historyList = watchHistory,
-                            onHistoryClick = { /* 履歴再生 */ },
-                            modifier = Modifier.focusRequester(contentFocusRequesters[0])
+                        HomeContents(
+                            lastWatchedChannel = lastWatchedChannel,
+                            watchHistory = watchHistory, // API/DB統合データを使用
+                            onChannelClick = { onChannelClick(it) },
+                            onHistoryClick = { history ->
+                                selectedProgram = history.toRecordedProgram()
+                            },
+                            konomiIp = konomiIp,
+                            konomiPort = konomiPort,
+                            modifier = Modifier.focusRequester(contentFocusRequesters[0]),
+                            externalFocusRequester = contentFocusRequesters[0]
                         )
                     }
 
-                    // ライブ（最重要：ここで LiveContent を呼ぶ）
-                    // ライブタブが非表示の時は、LiveContent 自体が再構成されないようにする
                     if (selectedTabIndex == 1) {
                         LiveContent(
                             modifier = Modifier.focusRequester(contentFocusRequesters[1]),
@@ -255,7 +243,6 @@ fun HomeLauncherScreen(
                         )
                     }
 
-                    // 番組表
                     if (selectedTabIndex == 2) {
                         EpgScreen(
                             viewModel = epgViewModel,
@@ -264,24 +251,16 @@ fun HomeLauncherScreen(
                             onBroadcastingTabFocusChanged = { isEpgBroadcastingTabFocused = it },
                             firstCellFocusRequester = epgFirstCellFocusRequester,
                             selectedProgram = epgSelectedProgram,
-                            onProgramSelected = { program ->
-                                // ★ 修正: program が null（戻るボタン押下時）でも、タブを移動させない
-                                epgSelectedProgram = program
-                            },
+                            onProgramSelected = { epgSelectedProgram = it },
                             selectedBroadcastingType = selectedBroadcastingType,
                             onTypeSelected = { selectedBroadcastingType = it },
                             onChannelSelected = { channelId ->
                                 val targetChannel = groupedChannels.values.flatten().find { it.id == channelId }
-                                if (targetChannel != null) {
-                                    // epgSelectedProgram = null // ここで消すと戻る場所がなくなるため保持するか、
-                                    // 視聴画面（VideoPlayerScreen）を EpgScreen の上に重ねる構成にします
-                                    onChannelClick(targetChannel)
-                                }
+                                if (targetChannel != null) onChannelClick(targetChannel)
                             }
                         )
                     }
 
-                    // ビデオ
                     if (selectedTabIndex == 3) {
                         VideoTabContent(
                             recentRecordings = recentRecordings,
@@ -296,43 +275,21 @@ fun HomeLauncherScreen(
             }
         }
 
-        // プレイヤー表示 (変更なし)
+        // プレイヤー表示
         if (selectedProgram != null) {
-            LaunchedEffect(selectedProgram!!.id) { homeViewModel.saveToHistory(selectedProgram!!) }
+            // 保存処理
+            LaunchedEffect(selectedProgram!!.id) {
+                homeViewModel.saveToHistory(selectedProgram!!)
+            }
             VideoPlayerScreen(
                 program = selectedProgram!!,
-                konomiIp = konomiIp, konomiPort = konomiPort,
+                konomiIp = konomiIp,
+                konomiPort = konomiPort,
                 onBackPressed = {
-                    lastBackPressTime = System.currentTimeMillis()
                     selectedProgram = null
-                    homeViewModel.refreshHomeData()
+                    homeViewModel.refreshHomeData() // 視聴後に履歴を最新化
                 }
             )
         }
     }
-
-
-        // 番組表詳細 (EpgProgram用)
-//        if (epgSelectedProgram != null) {
-//            EpgSelectedProgramDetail(
-//                program = epgSelectedProgram!!,
-//                onClose = { epgSelectedProgram = null }
-//            )
-//        }
-
-        // ビデオプレイヤー (RecordedProgram用)
-        key(selectedProgram?.id) {
-            if (selectedProgram != null) {
-                LaunchedEffect(selectedProgram!!.id) { homeViewModel.saveToHistory(selectedProgram!!) }
-                VideoPlayerScreen(
-                    program = selectedProgram!!,
-                    konomiIp = konomiIp, konomiPort = konomiPort,
-                    onBackPressed = {
-                        lastBackPressTime = System.currentTimeMillis()
-                        selectedProgram = null
-                        homeViewModel.refreshHomeData()
-                    }
-                )
-            }
-        }
-    }
+}

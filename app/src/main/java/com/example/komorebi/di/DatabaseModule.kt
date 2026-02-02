@@ -20,12 +20,8 @@ object DatabaseModule {
     fun provideAppDatabase(
         @ApplicationContext context: Context
     ): AppDatabase {
-        return Room.databaseBuilder(
-            context,
-            AppDatabase::class.java,
-            "komorebi_database"
-        )
-            .fallbackToDestructiveMigration() // 開発中はスキーマ変更時にDBをリセット
+        return Room.databaseBuilder(context, AppDatabase::class.java, "komorebi.db")
+            .fallbackToDestructiveMigration() // ← これを追加するとスキーマ変更時にDBを自動で作り直してくれます
             .build()
     }
 

@@ -41,3 +41,9 @@ data class RecordedItemDto(
     @SerializedName("start_time") val startTime: String,
     @SerializedName("thumbnail_url") val thumbnailUrl: String
 )
+
+fun getThumbnailUrl(id: String, host: String, port: String): String {
+    // KonomiTV APIの仕様に合わせたサムネイルURL
+    // 文字列のIDをそのまま利用します
+    return "http://$host:$port/api/video/$id/thumbnail"
+}
