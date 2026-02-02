@@ -7,16 +7,11 @@ import androidx.annotation.RequiresApi
 import androidx.compose.animation.*
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
-import androidx.compose.foundation.clickable
-import androidx.compose.foundation.focusable
+import androidx.compose.foundation.focusGroup
 import androidx.compose.foundation.layout.*
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Settings
-import androidx.compose.material3.AlertDialog
 import androidx.compose.runtime.*
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
-import androidx.compose.ui.ExperimentalComposeUiApi
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusProperties
@@ -31,7 +26,6 @@ import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.tv.material3.*
 import com.example.komorebi.data.model.EpgProgram
-import com.example.komorebi.data.model.KonomiHistoryProgram
 import com.example.komorebi.data.model.RecordedProgram
 import com.example.komorebi.ui.program.EpgScreen
 import com.example.komorebi.ui.video.VideoPlayerScreen
@@ -43,7 +37,7 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 
 @RequiresApi(Build.VERSION_CODES.O)
-@OptIn(ExperimentalTvMaterial3Api::class, ExperimentalComposeUiApi::class)
+@OptIn(ExperimentalTvMaterial3Api::class)
 @Composable
 fun HomeLauncherScreen(
     channelViewModel: ChannelViewModel = viewModel(),
@@ -56,240 +50,171 @@ fun HomeLauncherScreen(
     konomiIp: String,
     konomiPort: String,
     onChannelClick: (Channel) -> Unit,
+    onTabChange: (Int) -> Unit, // ★ MainActivityの状態と同期するために追加
     initialTabIndex: Int = 0,
-    onSettingsClick: () -> Unit = {},
     onUiReady: () -> Unit,
 ) {
     val tabs = listOf("ホーム", "ライブ", "番組表", "ビデオ")
     val scope = rememberCoroutineScope()
 
     // --- 状態管理 ---
-    var selectedTabIndex by rememberSaveable { mutableIntStateOf(if (lastWatchedChannel != null) 1 else initialTabIndex) }
-    var focusedTabIndex by remember { mutableIntStateOf(selectedTabIndex) }
+    // ★ 修正：lastWatchedChannel による強制上書きを廃止。MainActivity から渡される initialTabIndex を尊重。
+    var selectedTabIndex by rememberSaveable { mutableIntStateOf(initialTabIndex) }
+
     var tabRowHasFocus by remember { mutableStateOf(false) }
     var isVisible by remember { mutableStateOf(false) }
     var showExitDialog by remember { mutableStateOf(false) }
     var selectedProgram by remember { mutableStateOf<RecordedProgram?>(null) }
     var epgSelectedProgram by remember { mutableStateOf<EpgProgram?>(null) }
     var lastFocusedChannelId by remember { mutableStateOf<String?>(null) }
-    var lastBackPressTime by remember { mutableLongStateOf(0L) }
     var selectedBroadcastingType by rememberSaveable { mutableStateOf("GR") }
     var isSuppressingTabChange by remember { mutableStateOf(false) }
 
-    // --- フォーカス制御用 ---
+    // --- フォーカス制御 ---
     val tabFocusRequesters = remember { List(tabs.size) { FocusRequester() } }
-    val contentFocusRequesters = remember { List(tabs.size) { FocusRequester() } }
+    val contentFirstItemRequesters = remember { List(tabs.size) { FocusRequester() } }
     val epgTabFocusRequester = remember { FocusRequester() }
     val epgFirstCellFocusRequester = remember { FocusRequester() }
-    var isEpgBroadcastingTabFocused by remember { mutableStateOf(false) }
 
     val activity = (LocalContext.current as? Activity)
 
-    // --- データ購読 (Single Source of Truth) ---
+    // --- データ購読 ---
     val recentRecordings by channelViewModel.recentRecordings.collectAsState()
-
-    // ViewModel側でAPIとLocalDBが統合されたFlowを購読
     val watchHistory by homeViewModel.watchHistory.collectAsState()
+    val watchHistoryPrograms = remember(watchHistory) { watchHistory.map { it.toRecordedProgram() } }
 
-    // ビデオタブ等の RecordedProgram 型を期待するコンポーネント用
-    val watchHistoryPrograms = remember(watchHistory) {
-        watchHistory.map { it.toRecordedProgram() }
-    }
-
-    // 描画安定化ロジック
     LaunchedEffect(Unit) {
         isVisible = true
-        delay(300)
         onUiReady()
-        delay(200)
+        delay(300)
+        // 戻ってきた時に適切なタブにフォーカスを当てる
         tabFocusRequesters[selectedTabIndex].requestFocus()
     }
 
-    // バックハンドラー (ロジック維持)
-    BackHandler(enabled = true) {
+    // ★ 戻るキーの挙動
+    BackHandler(enabled = epgSelectedProgram != null || selectedProgram != null || !tabRowHasFocus) {
         when {
             epgSelectedProgram != null -> {
-                isSuppressingTabChange = true
                 epgSelectedProgram = null
                 scope.launch {
-                    delay(100)
+                    delay(300)
                     epgFirstCellFocusRequester.requestFocus()
-                    delay(400)
-                    isSuppressingTabChange = false
                 }
             }
             selectedProgram != null -> {
                 selectedProgram = null
+            }
+            !tabRowHasFocus -> {
+                tabFocusRequesters[selectedTabIndex].requestFocus()
+            }
+        }
+    }
+
+    Column(modifier = Modifier.fillMaxSize().background(Color(0xFF121212))) {
+        // --- ナビゲーションバー ---
+        TabRow(
+            selectedTabIndex = selectedTabIndex,
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(top = 18.dp, start = 40.dp, end = 40.dp)
+                .onFocusChanged { tabRowHasFocus = it.hasFocus }
+                .focusGroup(),
+            indicator = { tabPositions, doesTabRowHaveFocus ->
+                TabRowDefaults.UnderlinedIndicator(
+                    currentTabPosition = tabPositions[selectedTabIndex],
+                    doesTabRowHaveFocus = doesTabRowHaveFocus,
+                    activeColor = Color.White,
+                    inactiveColor = Color.White.copy(alpha = 0.5f),
+                    modifier = Modifier.height(2.dp)
+                )
+            }
+        ) {
+            tabs.forEachIndexed { index, title ->
+                Tab(
+                    selected = selectedTabIndex == index,
+                    onFocus = {
+                        if (!isSuppressingTabChange && epgSelectedProgram == null) {
+                            selectedTabIndex = index
+                            onTabChange(index) // ★ MainActivity側にも通知
+                        }
+                    },
+                    modifier = Modifier
+                        .focusRequester(tabFocusRequesters[index])
+                        .focusProperties {
+                            down = if (title == "番組表") epgTabFocusRequester else contentFirstItemRequesters[index]
+                        }
+                ) {
+                    Text(
+                        text = title,
+                        modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
+                        style = MaterialTheme.typography.titleMedium.copy(
+                            fontWeight = if (selectedTabIndex == index) FontWeight.Bold else FontWeight.Normal,
+                            fontSize = 16.sp
+                        ),
+                        color = if (tabRowHasFocus || selectedTabIndex == index) Color.White else Color.White.copy(0.4f)
+                    )
+                }
+            }
+        }
+
+        // --- コンテンツエリア ---
+        Box(modifier = Modifier.fillMaxSize().padding(top = 4.dp)) {
+            when (selectedTabIndex) {
+                0 -> HomeContents(
+                    lastWatchedChannel = lastWatchedChannel,
+                    watchHistory = watchHistory,
+                    onChannelClick = onChannelClick,
+                    onHistoryClick = { history -> selectedProgram = history.toRecordedProgram() },
+                    konomiIp = konomiIp, konomiPort = konomiPort,
+                    externalFocusRequester = contentFirstItemRequesters[0],
+                    tabFocusRequester = FocusRequester()
+                )
+                1 -> LiveContent(
+                    groupedChannels = groupedChannels,
+                    lastWatchedChannel = lastWatchedChannel,
+                    lastFocusedChannelId = lastFocusedChannelId,
+                    onFocusChannelChange = { lastFocusedChannelId = it },
+                    mirakurunIp = mirakurunIp, mirakurunPort = mirakurunPort,
+                    onChannelClick = onChannelClick,
+                    externalFocusRequester = contentFirstItemRequesters[1]
+                )
+                2 -> EpgScreen(
+                    viewModel = epgViewModel,
+                    topTabFocusRequester = FocusRequester(),
+                    tabFocusRequester = epgTabFocusRequester,
+                    firstCellFocusRequester = epgFirstCellFocusRequester,
+                    selectedProgram = epgSelectedProgram,
+                    onProgramSelected = { epgSelectedProgram = it },
+                    selectedBroadcastingType = selectedBroadcastingType,
+                    onTypeSelected = { selectedBroadcastingType = it },
+                    onChannelSelected = { channelId ->
+                        epgSelectedProgram = null
+                        val targetChannel = groupedChannels.values.flatten().find { it.id == channelId }
+                        if (targetChannel != null) onChannelClick(targetChannel)
+                    }
+                )
+                3 -> VideoTabContent(
+                    recentRecordings = recentRecordings,
+                    watchHistory = watchHistoryPrograms,
+                    konomiIp = konomiIp, konomiPort = konomiPort,
+                    externalFocusRequester = contentFirstItemRequesters[3],
+                    onProgramClick = { selectedProgram = it }
+                )
+            }
+        }
+    }
+
+    if (selectedProgram != null) {
+        LaunchedEffect(selectedProgram!!.id) {
+            homeViewModel.saveToHistory(selectedProgram!!)
+        }
+        VideoPlayerScreen(
+            program = selectedProgram!!,
+            konomiIp = konomiIp, konomiPort = konomiPort,
+            onBackPressed = {
+                selectedProgram = null
                 homeViewModel.refreshHomeData()
             }
-            selectedTabIndex == 2 -> {
-                if (tabRowHasFocus) {
-                    selectedTabIndex = 0
-                    tabFocusRequesters[0].requestFocus()
-                } else {
-                    tabFocusRequesters[2].requestFocus()
-                }
-            }
-            selectedTabIndex != 0 -> {
-                selectedTabIndex = 0
-                tabFocusRequesters[0].requestFocus()
-            }
-            else -> {
-                showExitDialog = true
-            }
-        }
-    }
-
-    if (showExitDialog) {
-        AlertDialog(
-            onDismissRequest = { showExitDialog = false },
-            title = { Text("アプリを終了しますか？") },
-            confirmButton = { Button(onClick = { activity?.finish() }) { Text("終了") } },
-            dismissButton = { OutlinedButton(onClick = { showExitDialog = false }) { Text("キャンセル") } }
         )
-    }
-
-    Box(modifier = Modifier.fillMaxSize()) {
-        AnimatedVisibility(
-            visible = isVisible,
-            enter = fadeIn(animationSpec = tween(500))
-        ) {
-            Column(modifier = Modifier.fillMaxSize().background(Color(0xFF121212))) {
-                // --- ナビゲーションバー ---
-                Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(top = 18.dp, start = 40.dp, end = 40.dp)
-                        .onFocusChanged { tabRowHasFocus = it.hasFocus },
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                        tabs.forEachIndexed { index, title ->
-                            val isSelected = selectedTabIndex == index
-                            val isFocused = tabRowHasFocus && focusedTabIndex == index
-
-                            Box(
-                                modifier = Modifier
-                                    .focusRequester(tabFocusRequesters[index])
-                                    .onFocusChanged { state ->
-                                        if (state.isFocused) {
-                                            focusedTabIndex = index
-                                            if (!isSuppressingTabChange && epgSelectedProgram == null) {
-                                                selectedTabIndex = index
-                                            }
-                                        }
-                                    }
-                                    .focusProperties {
-                                        down = when (title) {
-                                            "番組表" -> epgTabFocusRequester
-                                            else -> contentFocusRequesters[index]
-                                        }
-                                    }
-                                    .focusable()
-                                    .clickable { selectedTabIndex = index }
-                                    .padding(horizontal = 10.dp, vertical = 6.dp),
-                                contentAlignment = Alignment.Center
-                            ) {
-                                Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                                    Text(
-                                        text = title,
-                                        style = MaterialTheme.typography.titleMedium.copy(
-                                            fontWeight = FontWeight.Light,
-                                            letterSpacing = 1.2.sp,
-                                            fontSize = 16.sp,
-                                        ),
-                                        color = if (isSelected) Color.White else if (isFocused) Color.White.copy(0.85f) else Color.White.copy(0.25f)
-                                    )
-                                    Spacer(modifier = Modifier.height(8.dp))
-                                    Box(modifier = Modifier.width(28.dp).height(1.5.dp).background(if (isSelected) Color.White else Color.Transparent))
-                                }
-                            }
-                        }
-                    }
-                    Spacer(modifier = Modifier.weight(1f))
-                    IconButton(onClick = onSettingsClick, modifier = Modifier.size(32.dp)) {
-                        Icon(Icons.Default.Settings, contentDescription = "設定", tint = Color.White.copy(0.4f), modifier = Modifier.size(20.dp))
-                    }
-                }
-
-                // --- コンテンツエリア ---
-                Box(modifier = Modifier.fillMaxSize().padding(top = 4.dp)) {
-                    if (selectedTabIndex == 0) {
-                        HomeContents(
-                            lastWatchedChannel = lastWatchedChannel,
-                            watchHistory = watchHistory, // API/DB統合データを使用
-                            onChannelClick = { onChannelClick(it) },
-                            onHistoryClick = { history ->
-                                selectedProgram = history.toRecordedProgram()
-                            },
-                            konomiIp = konomiIp,
-                            konomiPort = konomiPort,
-                            modifier = Modifier.focusRequester(contentFocusRequesters[0]),
-                            externalFocusRequester = contentFocusRequesters[0]
-                        )
-                    }
-
-                    if (selectedTabIndex == 1) {
-                        LiveContent(
-                            modifier = Modifier.focusRequester(contentFocusRequesters[1]),
-                            groupedChannels = groupedChannels,
-                            lastWatchedChannel = lastWatchedChannel,
-                            lastFocusedChannelId = lastFocusedChannelId,
-                            onFocusChannelChange = { lastFocusedChannelId = it },
-                            mirakurunIp = mirakurunIp,
-                            mirakurunPort = mirakurunPort,
-                            topTabFocusRequester = tabFocusRequesters[1],
-                            onChannelClick = onChannelClick,
-                        )
-                    }
-
-                    if (selectedTabIndex == 2) {
-                        EpgScreen(
-                            viewModel = epgViewModel,
-                            topTabFocusRequester = tabFocusRequesters[2],
-                            tabFocusRequester = epgTabFocusRequester,
-                            onBroadcastingTabFocusChanged = { isEpgBroadcastingTabFocused = it },
-                            firstCellFocusRequester = epgFirstCellFocusRequester,
-                            selectedProgram = epgSelectedProgram,
-                            onProgramSelected = { epgSelectedProgram = it },
-                            selectedBroadcastingType = selectedBroadcastingType,
-                            onTypeSelected = { selectedBroadcastingType = it },
-                            onChannelSelected = { channelId ->
-                                val targetChannel = groupedChannels.values.flatten().find { it.id == channelId }
-                                if (targetChannel != null) onChannelClick(targetChannel)
-                            }
-                        )
-                    }
-
-                    if (selectedTabIndex == 3) {
-                        VideoTabContent(
-                            recentRecordings = recentRecordings,
-                            watchHistory = watchHistoryPrograms,
-                            konomiIp = konomiIp,
-                            konomiPort = konomiPort,
-                            externalFocusRequester = contentFocusRequesters[3],
-                            onProgramClick = { selectedProgram = it }
-                        )
-                    }
-                }
-            }
-        }
-
-        // プレイヤー表示
-        if (selectedProgram != null) {
-            // 保存処理
-            LaunchedEffect(selectedProgram!!.id) {
-                homeViewModel.saveToHistory(selectedProgram!!)
-            }
-            VideoPlayerScreen(
-                program = selectedProgram!!,
-                konomiIp = konomiIp,
-                konomiPort = konomiPort,
-                onBackPressed = {
-                    selectedProgram = null
-                    homeViewModel.refreshHomeData() // 視聴後に履歴を最新化
-                }
-            )
-        }
     }
 }

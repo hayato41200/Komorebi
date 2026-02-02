@@ -1,14 +1,12 @@
-// ui/home/VideoTabContent.kt
 package com.example.komorebi.ui.home
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
-import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.runtime.remember
+import androidx.compose.ui.ExperimentalComposeUiApi
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusProperties
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
@@ -20,36 +18,42 @@ import androidx.tv.material3.*
 import com.example.komorebi.data.model.RecordedProgram
 import com.example.komorebi.ui.components.RecordedCard
 
+@OptIn(ExperimentalComposeUiApi::class)
 @Composable
 fun VideoTabContent(
     recentRecordings: List<RecordedProgram>,
     watchHistory: List<RecordedProgram>,
     konomiIp: String,
     konomiPort: String,
-    externalFocusRequester: FocusRequester,
+    externalFocusRequester: FocusRequester, // 「ビデオ」タブから下を押した時の到達点
     onProgramClick: (RecordedProgram) -> Unit
 ) {
-    // TvLazyColumn ではなく標準の LazyColumn を使い、
-    // 各行（Row）に FocusRequester を持たせる構成が最も安定します
-    LazyColumn(
+    // TV専用の TvLazyColumn を使用。
+    // modifier から focusRequester を削除し、子要素に任せる
+    TvLazyColumn(
         modifier = Modifier
             .fillMaxSize()
-            .focusRequester(externalFocusRequester),
+            .focusRequester(externalFocusRequester)
+            .focusProperties {
+                exit = { FocusRequester.Default }
+            },
         contentPadding = PaddingValues(top = 24.dp, bottom = 32.dp),
         verticalArrangement = Arrangement.spacedBy(32.dp)
     ) {
-        // 新着録画
+        // 1. 新着録画（ここが最初の行）
         item {
             RecordedSection(
                 title = "新着の録画",
                 items = recentRecordings,
                 konomiIp = konomiIp,
                 konomiPort = konomiPort,
-                onProgramClick = onProgramClick
+                onProgramClick = onProgramClick,
+                // 最初のセクションの最初のアイテムにだけ、親から引き継いだRequesterを渡す
+                firstItemFocusRequester = externalFocusRequester
             )
         }
 
-        // 視聴履歴（データがある場合のみ）
+        // 2. 視聴履歴
         if (watchHistory.isNotEmpty()) {
             item {
                 RecordedSection(
@@ -57,7 +61,8 @@ fun VideoTabContent(
                     items = watchHistory,
                     konomiIp = konomiIp,
                     konomiPort = konomiPort,
-                    onProgramClick = onProgramClick
+                    onProgramClick = onProgramClick,
+                    firstItemFocusRequester = null // 2行目以降は自動フォーカスに任せる
                 )
             }
         }
@@ -72,7 +77,7 @@ fun RecordedSection(
     konomiPort: String,
     onProgramClick: (RecordedProgram) -> Unit,
     isPlaceholder: Boolean = false,
-    firstItemFocusRequester: FocusRequester? = null // 追加
+    firstItemFocusRequester: FocusRequester? = null
 ) {
     Column(modifier = Modifier.graphicsLayer(clip = false)) {
         Text(
@@ -85,30 +90,33 @@ fun RecordedSection(
         TvLazyRow(
             contentPadding = PaddingValues(horizontal = 32.dp),
             horizontalArrangement = Arrangement.spacedBy(12.dp),
-            modifier = Modifier.graphicsLayer(clip = false) // 拡大時の見切れ防止
+            modifier = Modifier.graphicsLayer(clip = false)
         ) {
             if (isPlaceholder) {
                 items(6) {
                     Box(
                         Modifier
                             .size(185.dp, 104.dp)
-                            .background(Color.White.copy(alpha = 0.1f), MaterialTheme.shapes.medium) // 角を少し丸く、色は薄く
+                            .background(Color.White.copy(alpha = 0.1f), MaterialTheme.shapes.medium)
                     )
                 }
-            }else {
-                // ★ items ではなく itemsIndexed を使用する
-                itemsIndexed(items) { index, program ->
+            } else {
+                itemsIndexed(items, key = { _, program -> program.id }) { index, program ->
                     RecordedCard(
                         program = program,
                         konomiIp = konomiIp,
                         konomiPort = konomiPort,
                         onClick = { onProgramClick(program) },
-                        // ★ ここで index を判定に使う
-                        modifier = if (index == 0 && firstItemFocusRequester != null) {
-                            Modifier.focusRequester(firstItemFocusRequester)
-                        } else {
-                            Modifier
-                        }
+                        modifier = Modifier
+                            // ★ 修正ポイント:
+                            // 最初の行(Section) かつ 最初のアイテム(Index 0) の時だけRequesterを適用
+                            .then(
+                                if (index == 0 && firstItemFocusRequester != null) {
+                                    Modifier.focusRequester(firstItemFocusRequester)
+                                } else {
+                                    Modifier
+                                }
+                            )
                     )
                 }
             }

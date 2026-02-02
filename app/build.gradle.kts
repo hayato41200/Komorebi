@@ -60,66 +60,51 @@ configurations.all {
     }
 }
 
+// dependencies ブロックを以下のように書き換えてください
 dependencies {
-    // Compose で Hilt を使うためのライブラリ
-    implementation("androidx.hilt:hilt-navigation-compose:1.1.0")
-    // 依存関係を直接指定（バージョンカタログを使わず、確実に同期させる）
-    implementation("androidx.core:core-ktx:1.12.0")
-    implementation("androidx.lifecycle:lifecycle-runtime-ktx:2.7.0")
-    implementation("androidx.activity:activity-compose:1.8.2")
-    implementation(platform("androidx.compose:compose-bom:2023.10.01"))
+    // 1. Compose BOM を最新に近いバージョンに更新 (ここが最重要)
+    // 2023.10.01 だと Tv-Foundation 1.0.0-alpha11 と互換性がありません
+    implementation(platform("androidx.compose:compose-bom:2024.10.01"))
+
+    // 2. 各ライブラリの指定 (バージョンは BOM が管理するので書かない)
     implementation("androidx.compose.ui:ui")
     implementation("androidx.compose.material3:material3")
-    implementation(libs.androidx.tv.material)
+    implementation("androidx.compose.foundation:foundation") // 追加
+    implementation("androidx.compose.ui:ui-graphics")       // 追加
 
-    // --- 不足分：Retrofit (API通信用) ---
+    // --- TV用ライブラリ ---
+    // これらは BOM に含まれないため、バージョンを固定します
+    implementation("androidx.tv:tv-material:1.0.0")
+    implementation("androidx.tv:tv-foundation:1.0.0-alpha11")
+
+    // --- Hilt ---
+    implementation("androidx.hilt:hilt-navigation-compose:1.2.0")
+    implementation("com.google.dagger:hilt-android:2.54")
+    kapt("com.google.dagger:hilt-compiler:2.54")
+
+    // --- Retrofit ---
     implementation("com.squareup.retrofit2:retrofit:2.9.0")
     implementation("com.squareup.retrofit2:converter-gson:2.9.0")
-    implementation(libs.androidx.compose.ui.test)
-    implementation(libs.androidx.compose.ui.text)
-    implementation(libs.androidx.compose.foundation) // JSON変換用
+    implementation("com.squareup.okhttp3:logging-interceptor:4.12.0")
 
-    // --- 不足分：Paging 3 (HomeViewModelで使用) ---
-    val paging_version = "3.3.0"
-    implementation("androidx.paging:paging-runtime:$paging_version")
-    implementation("androidx.paging:paging-compose:$paging_version")
+    // --- Room (KSPへの移行を推奨) ---
+    val room_version = "2.7.0-alpha11" // 2.7.0より安定している2.6.1を一旦推奨
+    implementation("androidx.room:room-runtime:$room_version")
+    implementation("androidx.room:room-ktx:$room_version")
+    implementation("androidx.room:room-paging:$room_version")
+    ksp("androidx.room:room-compiler:$room_version") // kaptからkspへ
 
-    // --- 不足分：Coil (画像表示用) ---
-    implementation("io.coil-kt:coil-compose:2.5.0")
-
-    // --- 不足分：Media3 (ExoPlayer - ライブ視聴用) ---
+    // --- Media3 ---
     val media3_version = "1.4.1"
     implementation("androidx.media3:media3-exoplayer:$media3_version")
     implementation("androidx.media3:media3-ui:$media3_version")
     implementation("androidx.media3:media3-common:$media3_version")
-    implementation("org.jellyfin.media3:media3-ffmpeg-decoder:1.5.0+1")
+    implementation("androidx.media3:media3-exoplayer-hls:$media3_version")
 
-    // --- 不足分：TV用 Material3 (ChannelListなどで使用) ---
-    implementation("androidx.tv:tv-material:1.0.0-alpha11")
-    implementation("androidx.tv:tv-foundation:1.0.0-alpha11")
-
-    // Room (ここがクラッシュの原因箇所)
-    val room_version = "2.7.0"
-    implementation("androidx.room:room-runtime:$room_version")
-    implementation("androidx.room:room-ktx:$room_version")
-    kapt("androidx.room:room-compiler:$room_version") // kaptではなくksp
-    implementation("androidx.room:room-paging:${room_version}")
-
-    // この行を追加（AAPTエラーを解消するために必要）
-    implementation("com.google.android.material:material:1.11.0")
-
-    implementation("androidx.compose.ui:ui-text-google-fonts:1.5.4")
+    // --- その他 ---
+    implementation("io.coil-kt:coil-compose:2.5.0")
+    implementation("androidx.paging:paging-runtime:3.3.0")
+    implementation("androidx.paging:paging-compose:3.3.0")
     implementation("androidx.datastore:datastore-preferences:1.1.1")
-    implementation("androidx.lifecycle:lifecycle-viewmodel-compose:2.6.2")
-
-    implementation("androidx.media3:media3-exoplayer-hls:1.2.0")
-    // Hilt
-    implementation("com.google.dagger:hilt-android:2.54")
-    // ★ ここで unresolved reference だった 'kapt' が使えるようになります
-    kapt("com.google.dagger:hilt-compiler:2.54")
-
-    implementation("androidx.hilt:hilt-navigation-compose:1.2.0")
-    // VLC for Android の公式ライブラリ
-    implementation("org.videolan.android:libvlc-all:3.6.5")
-    implementation("com.squareup.okhttp3:logging-interceptor:4.12.0")
+    implementation("com.google.android.material:material:1.12.0")
 }

@@ -1,7 +1,6 @@
 package com.example.komorebi.ui.home
 
 import android.os.Build
-import android.view.KeyEvent
 import androidx.annotation.RequiresApi
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.tween
@@ -9,19 +8,17 @@ import androidx.compose.foundation.MarqueeAnimationMode
 import androidx.compose.foundation.MarqueeSpacing
 import androidx.compose.foundation.background
 import androidx.compose.foundation.basicMarquee
-import androidx.compose.foundation.focusable
 import androidx.compose.foundation.layout.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
+import androidx.compose.ui.ExperimentalComposeUiApi
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
+import androidx.compose.ui.focus.focusRestorer
 import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
-import androidx.compose.ui.input.key.KeyEventType
-import androidx.compose.ui.input.key.onKeyEvent
-import androidx.compose.ui.input.key.type
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
@@ -34,11 +31,10 @@ import coil.compose.AsyncImage
 import com.example.komorebi.buildStreamId
 import com.example.komorebi.viewmodel.Channel
 import kotlinx.coroutines.delay
-import kotlinx.coroutines.launch
 import java.time.ZonedDateTime
 
 @RequiresApi(Build.VERSION_CODES.O)
-@OptIn(ExperimentalTvMaterial3Api::class)
+@OptIn(ExperimentalTvMaterial3Api::class, ExperimentalComposeUiApi::class)
 @Composable
 fun LiveContent(
     modifier: Modifier = Modifier,
@@ -48,24 +44,25 @@ fun LiveContent(
     onFocusChannelChange: (String) -> Unit,
     mirakurunIp: String,
     mirakurunPort: String,
-    topTabFocusRequester: FocusRequester,
+    // TabRowの focusProperties { down = ... } から指定されるRequester
+    externalFocusRequester: FocusRequester,
     onChannelClick: (Channel) -> Unit
 ) {
     val categories = remember(groupedChannels) {
         groupedChannels.keys.map { key -> if (key == "GR") "地デジ" else key }
     }
 
-    // ★ ターゲットIDの確定（nullなら最初のチャンネルをデフォルトにする）
-    val defaultChannelId = remember(groupedChannels) {
-        groupedChannels["GR"]?.firstOrNull()?.id ?: groupedChannels.values.firstOrNull()?.firstOrNull()?.id
+    // ターゲットID（最後にフォーカスした、または最後に視聴したチャンネル）
+    val targetId = remember(groupedChannels) {
+        lastFocusedChannelId ?: lastWatchedChannel?.id ?:
+        (groupedChannels["GR"]?.firstOrNull()?.id ?: groupedChannels.values.firstOrNull()?.firstOrNull()?.id)
     }
-    val targetId = lastFocusedChannelId ?: lastWatchedChannel?.id ?: defaultChannelId
 
-    val rowStates = remember { mutableMapOf<String, TvLazyListState>() }
-    val channelFocusRequesters = remember { mutableMapOf<String, FocusRequester>() }
+    // コンテンツエリアの入り口となるRequester
+    val targetFocusRequester = remember { FocusRequester() }
     val listState = rememberTvLazyListState()
 
-    // 進捗バー更新
+    // プログラム進捗更新用
     var globalTick by remember { mutableIntStateOf(0) }
     LaunchedEffect(Unit) {
         while(true) {
@@ -74,29 +71,21 @@ fun LiveContent(
         }
     }
 
-    // ★ 修正：フォーカス復元ロジック（初回表示・視聴後復帰 両対応）
-    LaunchedEffect(targetId, groupedChannels) {
+    // 初期表示・復帰時のスクロール位置調整（フォーカスは要求しない）
+    LaunchedEffect(targetId) {
         if (targetId == null) return@LaunchedEffect
 
         var targetCatIndex = -1
-        var targetCatName = ""
         categories.forEachIndexed { index, displayCat ->
             val key = if (displayCat == "地デジ") "GR" else displayCat
             if (groupedChannels[key]?.any { it.id == targetId } == true) {
                 targetCatIndex = index
-                targetCatName = displayCat
             }
         }
 
         if (targetCatIndex != -1) {
-            // 垂直方向の移動
+            // スクロールのみ実行。requestFocus()は呼び出さないことで、勝手にフォーカスが移るのを防ぐ
             listState.scrollToItem(targetCatIndex)
-            delay(150) // CompositionとRowの生成待ち
-
-            // 水平方向の移動
-            val originalKey = if (targetCatName == "地デジ") "GR" else targetCatName
-            val chIndex = groupedChannels[originalKey]?.indexOfFirst { it.id == targetId } ?: 0
-            rowStates[targetCatName]?.scrollToItem(chIndex)
         }
     }
 
@@ -104,34 +93,17 @@ fun LiveContent(
         state = listState,
         modifier = modifier
             .fillMaxSize()
-            .onFocusChanged { state ->
-                // 親コンテナがフォーカスを得た（タブから降りてきた）際の救済措置
-                if (state.isFocused && targetId != null) {
-                    channelFocusRequesters[targetId]?.requestFocus()
-                }
-            }
-            .focusable(),
+            // HomeLauncherScreenからの「下」入力を受け取るRequester
+            .focusRequester(externalFocusRequester)
+            // コンテンツエリア内でフォーカスを失っても、戻ってきた時に前回の場所を復元
+            .focusRestorer(),
         contentPadding = PaddingValues(top = 16.dp, bottom = 32.dp),
         verticalArrangement = Arrangement.spacedBy(20.dp),
         pivotOffsets = PivotOffsets(parentFraction = 0.15f)
     ) {
-        itemsIndexed(categories, key = { _, cat -> cat }) { categoryIndex, displayCategory ->
+        itemsIndexed(categories, key = { _, cat -> cat }) { _, displayCategory ->
             val originalKey = if (displayCategory == "地デジ") "GR" else displayCategory
             val channels = groupedChannels[originalKey] ?: emptyList()
-
-            // 初期位置の計算
-            val initialChIndex = remember(channels, targetId) {
-                val index = channels.indexOfFirst { it.id == targetId }
-                if (index >= 0) index else 0
-            }
-
-            // 各行のStateを個別に生成
-            val rowState = rememberTvLazyListState(initialFirstVisibleItemIndex = initialChIndex)
-
-            // SideEffectを使用してMapを更新（外部のLaunchedEffectから参照可能にする）
-            SideEffect {
-                rowStates[displayCategory] = rowState
-            }
 
             Column(modifier = Modifier.fillMaxWidth().graphicsLayer(clip = false)) {
                 Text(
@@ -142,14 +114,13 @@ fun LiveContent(
                 )
 
                 TvLazyRow(
-                    state = rowState,
                     horizontalArrangement = Arrangement.spacedBy(12.dp),
                     contentPadding = PaddingValues(horizontal = 32.dp),
                     pivotOffsets = PivotOffsets(parentFraction = 0.1f),
                     modifier = Modifier.fillMaxWidth().graphicsLayer(clip = false)
                 ) {
                     items(channels, key = { it.id }) { channel ->
-                        val fr = channelFocusRequesters.getOrPut(channel.id) { FocusRequester() }
+                        val isTarget = channel.id == targetId
 
                         ChannelWideCard(
                             channel = channel,
@@ -158,18 +129,10 @@ fun LiveContent(
                             globalTick = globalTick,
                             onClick = { onChannelClick(channel) },
                             modifier = Modifier
-                                .focusRequester(fr)
+                                // ターゲット（前回値など）のカードにのみRequesterを付与。
+                                // これにより、TabRowで「下」を押した時にこのカードにフォーカスが飛ぶ。
+                                .then(if (isTarget) Modifier.focusRequester(targetFocusRequester) else Modifier)
                                 .onFocusChanged { if (it.isFocused) onFocusChannelChange(channel.id) }
-                                .onKeyEvent { keyEvent ->
-                                    if (keyEvent.type == KeyEventType.KeyDown &&
-                                        keyEvent.nativeKeyEvent.keyCode == KeyEvent.KEYCODE_DPAD_UP) {
-                                        if (categoryIndex == 0) {
-                                            topTabFocusRequester.requestFocus()
-                                            return@onKeyEvent true
-                                        }
-                                    }
-                                    false
-                                }
                         )
                     }
                 }
@@ -239,10 +202,7 @@ fun ChannelWideCard(
 
                 Spacer(modifier = Modifier.width(6.dp))
 
-                Column(
-                    modifier = Modifier.fillMaxHeight(),
-                    verticalArrangement = Arrangement.Center
-                ) {
+                Column(modifier = Modifier.fillMaxHeight(), verticalArrangement = Arrangement.Center) {
                     Text(
                         text = channel.name,
                         style = MaterialTheme.typography.labelSmall,
@@ -273,7 +233,6 @@ fun ChannelWideCard(
                     )
                 }
             }
-
             if (channel.programPresent != null) {
                 Box(modifier = Modifier.fillMaxWidth().height(2.5.dp).background(Color.Gray.copy(0.1f))) {
                     Box(

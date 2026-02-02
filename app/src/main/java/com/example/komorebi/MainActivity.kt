@@ -37,42 +37,38 @@ import kotlinx.coroutines.*
 class MainActivity : ComponentActivity() {
 
     private val viewModel: ChannelViewModel by viewModels()
-    private val epgViewModel: EpgViewModel by viewModels() // ★追加
+    private val epgViewModel: EpgViewModel by viewModels()
     private val channelViewModel: ChannelViewModel by viewModels()
-
 
     @RequiresApi(Build.VERSION_CODES.O)
     @OptIn(ExperimentalTvMaterial3Api::class)
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
 
-        // 両方のデータをフェッチ開始
         viewModel.fetchChannels()
-        epgViewModel.preloadAllEpgData() // ★番組表のプリロード開始
+        epgViewModel.preloadAllEpgData()
         channelViewModel.fetchRecentRecordings()
 
         setContent {
             KomorebiTheme {
                 val context = LocalContext.current
                 val activity = context as? Activity
-                // 1. Compose側の準備完了を管理する状態を追加
                 var isUiReady by remember { mutableStateOf(false) }
                 val scope = rememberCoroutineScope()
 
-                // 放送局リストのロード状態
                 val isChannelLoading by viewModel.isLoading.collectAsState()
-                // 番組表のプリロード状態
                 val isEpgLoading by epgViewModel.isPreloading.collectAsState()
-
                 val groupedChannels by viewModel.groupedChannels.collectAsState()
 
-                // --- 状態保持（変更なし） ---
+                // --- 状態保持 ---
                 var selectedChannel by remember { mutableStateOf<Channel?>(null) }
-                var isPlayerMode by remember { mutableStateOf(false) }
                 var isSettingsMode by remember { mutableStateOf(false) }
                 var isMiniListOpen by remember { mutableStateOf(false) }
                 var showExitDialog by remember { mutableStateOf(false) }
+
+                // タブの状態を MainActivity で一括管理し、戻ってきた時に保持されるようにします
                 var currentTabIndex by remember { mutableIntStateOf(0) }
+
                 val isDataLoading = isChannelLoading || isEpgLoading
                 val extraDelay = getDynamicDelay()
 
@@ -82,39 +78,45 @@ class MainActivity : ComponentActivity() {
                 val konomiIp by repository.konomiIp.collectAsState(initial = "https://192-168-100-60.local.konomi.tv")
                 val konomiPort by repository.konomiPort.collectAsState(initial = "7000")
 
-                // 再生中かどうかでBackHandlerの挙動を変える
+                // ★ BackHandler：最優先（視聴中）から順に判定
                 BackHandler(enabled = true) {
-                    if (isPlayerMode) {
-                        // 再生モードなら、終了ダイアログを出さずにリストに戻る
-                        isPlayerMode = false
-                    } else if (isSettingsMode) {
-                        isSettingsMode = false
-                    } else {
-                        // ホーム画面なら終了ダイアログを表示
-                        showExitDialog = true
+                    when {
+                        // 1. ライブ視聴中なら視聴を終了（selectedChannelをnullにすればHomeに戻る）
+                        selectedChannel != null -> {
+                            selectedChannel = null
+                        }
+                        // 2. 設定画面なら設定を閉じる
+                        isSettingsMode -> {
+                            isSettingsMode = false
+                        }
+                        // 3. それ以外（Home画面）は HomeLauncherScreen 側の BackHandler に任せるため
+                        // 本来はここでは何もしないか、ダイアログ表示。
+                        // HomeLauncher側でBackHandlerがあるため、こちらはHome時はダイアログ表示に統一
+                        else -> {
+                            showExitDialog = true
+                        }
                     }
                 }
 
                 if (isDataLoading) {
-                    // 通信中は完全にLoadingを表示
                     LoadingScreen()
                 } else {
                     Box(modifier = Modifier.fillMaxSize()) {
                         when {
-                            isPlayerMode -> {
-                                selectedChannel?.let { currentChannel ->
-                                    key(currentChannel.id) {
-                                        LivePlayerScreen(
-                                            channel = selectedChannel!!,
-                                            groupedChannels = groupedChannels,
-                                            mirakurunIp = mirakurunIp,
-                                            mirakurunPort = mirakurunPort,
-                                            isMiniListOpen = isMiniListOpen,
-                                            onMiniListToggle = { isMiniListOpen = it },
-                                            onChannelSelect = { selectedChannel = it },
-                                            onBackPressed = { isPlayerMode = false } // ★ここを追加
-                                        )
-                                    }
+                            selectedChannel != null -> {
+                                key(selectedChannel!!.id) {
+                                    LivePlayerScreen(
+                                        channel = selectedChannel!!,
+                                        groupedChannels = groupedChannels,
+                                        mirakurunIp = mirakurunIp,
+                                        mirakurunPort = mirakurunPort,
+                                        isMiniListOpen = isMiniListOpen,
+                                        onMiniListToggle = { isMiniListOpen = it },
+                                        onChannelSelect = { selectedChannel = it },
+                                        onBackPressed = {
+                                            selectedChannel = null
+                                        }
+                                    )
                                 }
                             }
                             isSettingsMode -> {
@@ -129,13 +131,13 @@ class MainActivity : ComponentActivity() {
                                     konomiIp = konomiIp,
                                     konomiPort = konomiPort,
                                     initialTabIndex = currentTabIndex,
-                                    // ★ EpgViewModel を明示的に渡すか、HomeLauncherScreen内でHiltから取得する
+                                    // タブ変更イベントを拾って MainActivity の currentTabIndex を更新
+                                    onTabChange = { currentTabIndex = it },
                                     onChannelClick = { channel ->
                                         selectedChannel = channel
-                                        currentTabIndex = 1
-                                        isPlayerMode = true
+                                        // ★修正ポイント: ここで強制的に 1 にしていたのを削除
+                                        // これにより、番組表(2)から遷移した場合は 2 のまま保持されます
                                     },
-                                    onSettingsClick = { isSettingsMode = true },
                                     onUiReady = {
                                         scope.launch {
                                             delay(extraDelay)
@@ -145,15 +147,13 @@ class MainActivity : ComponentActivity() {
                                 )
                             }
                         }
+
                         androidx.compose.animation.AnimatedVisibility(
                             visible = !isUiReady,
                             enter = androidx.compose.animation.fadeIn(),
                             exit = androidx.compose.animation.fadeOut()
                         ) {
-                            Box(
-                                modifier = Modifier
-                                    .fillMaxSize()
-                            ) {
+                            Box(modifier = Modifier.fillMaxSize()) {
                                 LoadingScreen()
                             }
                         }
@@ -175,15 +175,10 @@ fun getDynamicDelay(): Long {
     val activityManager = context.getSystemService(Context.ACTIVITY_SERVICE) as ActivityManager
     val memoryInfo = ActivityManager.MemoryInfo()
     activityManager.getMemoryInfo(memoryInfo)
-
     val totalRamGb = memoryInfo.totalMem / (1024 * 1024 * 1024.0)
-
-    Log.i("getDynamicDelay", "Total RAM: $totalRamGb GB")
-
-
     return when {
-        totalRamGb <= 1.5 -> 7000L // Fire TV Stickなど低スペック
-        totalRamGb <= 3.0 -> 4500L // 標準的なTV
-        else -> 1000L              // Shield TVなど高性能機
+        totalRamGb <= 1.5 -> 7000L
+        totalRamGb <= 3.0 -> 4500L
+        else -> 1000L
     }
 }
