@@ -13,6 +13,7 @@ import com.example.komorebi.ui.main.MainRootScreen
 import com.example.komorebi.viewmodel.ChannelViewModel
 import com.example.komorebi.viewmodel.EpgViewModel
 import com.example.komorebi.viewmodel.HomeViewModel
+import com.example.komorebi.viewmodel.RecordViewModel
 import dagger.hilt.android.AndroidEntryPoint
 
 @AndroidEntryPoint
@@ -22,6 +23,8 @@ class MainActivity : ComponentActivity() {
     private val channelViewModel: ChannelViewModel by viewModels()
     private val epgViewModel: EpgViewModel by viewModels()
     private val homeViewModel: HomeViewModel by viewModels()
+    private val recordViewModel: RecordViewModel by viewModels()
+
 
     @RequiresApi(Build.VERSION_CODES.O)
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -41,6 +44,7 @@ class MainActivity : ComponentActivity() {
                     channelViewModel = channelViewModel,
                     epgViewModel = epgViewModel,
                     homeViewModel = homeViewModel,
+                    recordViewModel = recordViewModel,
                     onExitApp = { showExitDialog = true }
                 )
 

@@ -13,6 +13,7 @@ import com.example.komorebi.data.model.EpgProgram
 import com.example.komorebi.data.model.RecordedProgram
 import com.example.komorebi.ui.home.HomeLauncherScreen
 import com.example.komorebi.ui.live.LivePlayerScreen
+import com.example.komorebi.ui.video.VideoPlayerScreen
 import com.example.komorebi.viewmodel.*
 
 @RequiresApi(Build.VERSION_CODES.O)
@@ -22,6 +23,7 @@ fun MainRootScreen(
     epgViewModel: EpgViewModel,
     homeViewModel: HomeViewModel,
     settingsViewModel: SettingsViewModel = hiltViewModel(),
+    recordViewModel: RecordViewModel,
     onExitApp: () -> Unit
 ) {
     var currentTabIndex by rememberSaveable { mutableIntStateOf(0) }
@@ -81,11 +83,18 @@ fun MainRootScreen(
                     selectedChannel = null
                 }
             )
+        } else if (selectedProgram != null) {
+                VideoPlayerScreen(
+                    program = selectedProgram!!,
+                    konomiIp = konomiIp, konomiPort = konomiPort,
+                    onBackPressed = { selectedProgram = null }
+                )
         } else {
             HomeLauncherScreen(
                 channelViewModel = channelViewModel,
                 homeViewModel = homeViewModel,
                 epgViewModel = epgViewModel,
+                recordViewModel = recordViewModel,
                 groupedChannels = groupedChannels,
                 mirakurunIp = mirakurunIp,
                 mirakurunPort = mirakurunPort,

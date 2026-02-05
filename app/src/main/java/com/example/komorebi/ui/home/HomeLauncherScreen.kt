@@ -27,6 +27,7 @@ import com.example.komorebi.viewmodel.ChannelViewModel
 import com.example.komorebi.viewmodel.EpgUiState
 import com.example.komorebi.viewmodel.EpgViewModel
 import com.example.komorebi.viewmodel.HomeViewModel
+import com.example.komorebi.viewmodel.RecordViewModel
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.yield
 
@@ -37,6 +38,7 @@ fun HomeLauncherScreen(
     channelViewModel: ChannelViewModel,
     homeViewModel: HomeViewModel,
     epgViewModel: EpgViewModel,
+    recordViewModel: RecordViewModel,
     groupedChannels: Map<String, List<Channel>>,
     mirakurunIp: String,
     mirakurunPort: String,
@@ -71,6 +73,12 @@ fun HomeLauncherScreen(
     // EPGのUI状態と放送波種別の状態を監視
     val epgUiState = epgViewModel.uiState
     val currentBroadcastingType by epgViewModel.selectedBroadcastingType.collectAsState()
+
+    // 最近見たチャンネルと録画の視聴履歴を取得
+    val watchHistory by homeViewModel.watchHistory.collectAsState()
+    val lastChannels by homeViewModel.lastWatchedChannelFlow.collectAsState()
+    val recentRecordings by recordViewModel.recentRecordings.collectAsState()
+    val watchHistoryPrograms = remember(watchHistory) { watchHistory.map { it.toRecordedProgram() } }
 
     // 取得したチャンネルリストに基づいてロゴURLのリストを生成
     val logoUrls = remember(epgUiState) {
@@ -162,11 +170,11 @@ fun HomeLauncherScreen(
                         modifier = Modifier
                             .focusRequester(tabFocusRequesters[index])
                             .focusProperties {
-                                if (index == 2) {
-                                    down = contentFirstItemRequesters[index]
-                                } else {
+//                                if (index == 2) {
+//                                    down = contentFirstItemRequesters[index]
+//                                } else {
                                     down = FocusRequester.Default
-                                }
+//                                }
                             }
                     ) {
                         Text(
@@ -192,6 +200,33 @@ fun HomeLauncherScreen(
                 label = "TabContentTransition"
             ) { targetIndex ->
                 when (targetIndex) {
+                    0 -> {
+                        HomeContents(
+                            lastWatchedChannels = lastChannels,
+                            watchHistory = watchHistory,
+                            onChannelClick = onChannelClick,
+                            onHistoryClick = { history -> onProgramSelected(history.toRecordedProgram()) },
+                            konomiIp = konomiIp, konomiPort = konomiPort,
+                            mirakurunIp = mirakurunIp, mirakurunPort = mirakurunPort,
+                            externalFocusRequester = contentFirstItemRequesters[0],
+                            tabFocusRequester = tabFocusRequesters[0]
+                        )
+                    }
+                    1 -> { // ライブタブ
+                        LiveContent(
+                            groupedChannels = groupedChannels,
+                            selectedChannel = selectedChannel,
+                            lastWatchedChannel = null, // 必要に応じて ViewModel から取得
+                            onChannelClick = onChannelClick,
+                            onFocusChannelChange = { /* 履歴保存用など */ },
+                            mirakurunIp = mirakurunIp,
+                            mirakurunPort = mirakurunPort,
+                            // ★ 修正ポイント: 役割を明示的に渡す
+                            topNavFocusRequester = tabFocusRequesters[1],      // 上に戻る先
+                            contentFirstItemRequester = contentFirstItemRequesters[1], // 下に降りてくる入口
+                            onPlayerStateChanged = { }
+                        )
+                    }
                     2 -> { // 番組表タブ
                         when (val state = epgUiState) {
                             is EpgUiState.Success -> {
@@ -230,6 +265,16 @@ fun HomeLauncherScreen(
                                 }
                             }
                         }
+                    }
+                    3 -> {
+                        VideoTabContent(
+                            recentRecordings = recentRecordings,
+                            watchHistory = watchHistoryPrograms,
+                            selectedProgram = selectedProgram,
+                            konomiIp = konomiIp, konomiPort = konomiPort,
+                            externalFocusRequester = contentFirstItemRequesters[3],
+                            onProgramClick = onProgramSelected
+                        )
                     }
                     else -> {
                         Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
