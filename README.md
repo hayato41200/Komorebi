@@ -35,7 +35,7 @@
 ### 📅 番組表タブ
 <img width="1920" height="1080" alt="Image" src="https://github.com/user-attachments/assets/f5c026a2-c2fa-4619-a98b-c5497b813781" />
 
-**マルチ放送波対応**: 放送波種別ごとに最適化された番組表をシームレスに閲覧できます。
+**マルチ放送波対応**: 放送波種別ごとに最適化された番組表をシームレスに閲覧できます。また、番組表画面にて戻るキーを長押しすることで、現在時刻に即座に戻ることができます。
 
 <img width="1920" height="1080" alt="Image" src="https://github.com/user-attachments/assets/9e756fd4-5757-44ad-8f6b-c4807674afcb" />
 
@@ -43,7 +43,7 @@
 
 <img width="1920" height="1080" alt="Image" src="https://github.com/user-attachments/assets/c46b497a-a94e-4282-8eea-7044967e3158" />
 
-**日時指定ジャンプ**: 任意の日時へ素早く移動し、番組チェックが可能です。また、番組表画面にて戻るキーを長押しすることで、現在時刻に即座に戻ることができます。
+**日時指定ジャンプ**: 任意の日時へ素早く移動し、番組チェックが可能です。
 
 ### 🎥 ビデオタブ
 
