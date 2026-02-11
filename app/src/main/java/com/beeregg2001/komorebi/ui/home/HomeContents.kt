@@ -51,7 +51,9 @@ fun HomeContents(
     val typeLabels = mapOf("GR" to "地デジ", "BS" to "BS", "CS" to "CS", "BS4K" to "BS4K", "SKY" to "スカパー")
 
     TvLazyColumn(
-        modifier = modifier.fillMaxSize(),
+        modifier = modifier
+            .fillMaxSize()
+            .focusRequester(externalFocusRequester),
         contentPadding = PaddingValues(top = 24.dp, bottom = 32.dp),
         verticalArrangement = Arrangement.spacedBy(32.dp)
     ) {
@@ -72,13 +74,7 @@ fun HomeContents(
                             val itemRequester = remember { FocusRequester() }
                             val isTarget = channel.id == lastFocusedChannelId
 
-                            // チャンネルのフォーカス復帰
-                            LaunchedEffect(isTarget) {
-                                if (isTarget) {
-                                    delay(50)
-                                    runCatching { itemRequester.requestFocus() }
-                                }
-                            }
+                            // ★修正: 自動でフォーカスを奪うロジックを削除（トップナビに留まるようにするため）
 
                             Surface(
                                 onClick = { onChannelClick(channel) },
@@ -87,10 +83,8 @@ fun HomeContents(
                                     .onFocusChanged { isFocused = it.isFocused }
                                     .then(
                                         if (isTarget) Modifier.focusRequester(itemRequester)
-                                        else if (index == 0 && lastFocusedChannelId == null && lastFocusedProgramId == null) Modifier.focusRequester(externalFocusRequester)
                                         else Modifier
                                     )
-                                    // ★修正: リストの端での移動を制限
                                     .focusProperties {
                                         up = tabFocusRequester
                                         if (index == 0) left = FocusRequester.Cancel
@@ -104,7 +98,6 @@ fun HomeContents(
                                 shape = ClickableSurfaceDefaults.shape(MaterialTheme.shapes.medium)
                             ) {
                                 Row(modifier = Modifier.fillMaxSize().padding(12.dp), verticalAlignment = Alignment.CenterVertically) {
-                                    // ロゴサイズ 72x40dp
                                     Box(
                                         modifier = Modifier
                                             .size(72.dp, 40.dp)
@@ -153,12 +146,7 @@ fun HomeContents(
                             val itemRequester = remember { FocusRequester() }
                             val isTarget = history.program.id == lastFocusedProgramId
 
-                            LaunchedEffect(isTarget) {
-                                if (isTarget) {
-                                    delay(50)
-                                    runCatching { itemRequester.requestFocus() }
-                                }
-                            }
+                            // ★修正: 自動でフォーカスを奪うロジックを削除
 
                             WatchHistoryCard(
                                 history = history,
@@ -168,10 +156,8 @@ fun HomeContents(
                                 modifier = Modifier
                                     .then(
                                         if (isTarget) Modifier.focusRequester(itemRequester)
-                                        else if (index == 0 && lastFocusedChannelId == null && lastFocusedProgramId == null && lastWatchedChannels.isEmpty()) Modifier.focusRequester(externalFocusRequester)
                                         else Modifier
                                     )
-                                    // ★修正: リストの端での移動を制限
                                     .focusProperties {
                                         if (index == 0) left = FocusRequester.Cancel
                                         if (index == watchHistory.lastIndex) right = FocusRequester.Cancel
@@ -187,9 +173,10 @@ fun HomeContents(
     }
 }
 
+// 以下の Composable 関数は既存のまま維持
 @Composable
-fun EmptyPlaceholder(message: String) {
-    Box(modifier = Modifier.padding(horizontal = 32.dp)) {
+fun EmptyPlaceholder(message: String, modifier: Modifier = Modifier) {
+    Box(modifier = modifier.padding(horizontal = 32.dp)) {
         Surface(
             onClick = {}, enabled = false,
             modifier = Modifier.width(280.dp).height(80.dp),

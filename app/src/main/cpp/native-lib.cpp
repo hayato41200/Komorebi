@@ -127,7 +127,7 @@ public:
 extern "C" {
 
 JNIEXPORT jlong JNICALL
-Java_com_example_komorebi_NativeLib_openFilter(JNIEnv *env, jobject thiz, jobjectArray args) {
+Java_com_beeregg2001_komorebi_NativeLib_openFilter(JNIEnv *env, jobject thiz, jobjectArray args) {
     int argc = env->GetArrayLength(args);
     std::vector<std::string> arg_strings;
     std::vector<char*> argv_ptrs;
@@ -142,7 +142,7 @@ Java_com_example_komorebi_NativeLib_openFilter(JNIEnv *env, jobject thiz, jobjec
 }
 
 JNIEXPORT void JNICALL
-Java_com_example_komorebi_NativeLib_pushDataBuffer(JNIEnv *env, jobject thiz, jlong handle, jobject inputBuf, jint inputLen) {
+Java_com_beeregg2001_komorebi_NativeLib_pushDataBuffer(JNIEnv *env, jobject thiz, jlong handle, jobject inputBuf, jint inputLen) {
     auto* ctx = reinterpret_cast<TsReadExContext*>(handle);
     if (!ctx) return;
     uint8_t* inPtr = (uint8_t*)env->GetDirectBufferAddress(inputBuf);
@@ -150,7 +150,7 @@ Java_com_example_komorebi_NativeLib_pushDataBuffer(JNIEnv *env, jobject thiz, jl
 }
 
 JNIEXPORT jint JNICALL
-Java_com_example_komorebi_NativeLib_popDataBuffer(JNIEnv *env, jobject thiz, jlong handle, jobject outputBuf, jint maxLen) {
+Java_com_beeregg2001_komorebi_NativeLib_popDataBuffer(JNIEnv *env, jobject thiz, jlong handle, jobject outputBuf, jint maxLen) {
     auto* ctx = reinterpret_cast<TsReadExContext*>(handle);
     if (!ctx) return -1;
     uint8_t* outPtr = (uint8_t*)env->GetDirectBufferAddress(outputBuf);
@@ -159,7 +159,7 @@ Java_com_example_komorebi_NativeLib_popDataBuffer(JNIEnv *env, jobject thiz, jlo
 }
 
 JNIEXPORT jint JNICALL
-Java_com_example_komorebi_NativeLib_processDataBuffer(JNIEnv *env, jobject thiz, jlong handle, jobject inputBuf, jint inputLen, jobject outputBuf) {
+Java_com_beeregg2001_komorebi_NativeLib_processDataBuffer(JNIEnv *env, jobject thiz, jlong handle, jobject inputBuf, jint inputLen, jobject outputBuf) {
     auto* ctx = reinterpret_cast<TsReadExContext*>(handle);
     if (!ctx) return -1;
     uint8_t* inPtr = (uint8_t*)env->GetDirectBufferAddress(inputBuf);
@@ -171,7 +171,7 @@ Java_com_example_komorebi_NativeLib_processDataBuffer(JNIEnv *env, jobject thiz,
 }
 
 JNIEXPORT void JNICALL
-Java_com_example_komorebi_NativeLib_closeFilter(JNIEnv *env, jobject thiz, jlong handle) {
+Java_com_beeregg2001_komorebi_NativeLib_closeFilter(JNIEnv *env, jobject thiz, jlong handle) {
     auto* ctx = reinterpret_cast<TsReadExContext*>(handle);
     if (ctx) delete ctx;
 }
