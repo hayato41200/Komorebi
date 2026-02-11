@@ -60,7 +60,7 @@
 ### ⚙️ 設定タブ
 <img width="1920" height="1080" alt="Image" src="https://github.com/user-attachments/assets/33c0c8d3-a164-48c0-924f-ac77e03da923" />
 
-**接続設定**: KonomiTV および Mirakurun のアドレス指定が可能です。
+**接続設定**: KonomiTV および Mirakurun のアドレス指定が可能です。Mirakurunについてはダイレクトストリームを使いたい場合に記入してください。
 
 ---
 
