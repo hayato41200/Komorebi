@@ -49,10 +49,11 @@ fun EpgNavigationContainer(
     var internalRestoreChannelId by remember { mutableStateOf(restoreChannelId) }
     var internalRestoreStartTime by remember { mutableStateOf<String?>(null) }
 
-    // ★追加: 外部から null が渡された時（タブ移動時など）は内部の復元用キャッシュも確実にクリアする
+    // ★修正: 親から渡される restoreChannelId を監視し、状態を同期
+    // null が渡された（他タブからの移動）場合は、内部の復元用情報もクリアする
     LaunchedEffect(restoreChannelId) {
+        internalRestoreChannelId = restoreChannelId
         if (restoreChannelId == null) {
-            internalRestoreChannelId = null
             internalRestoreStartTime = null
         }
     }
@@ -110,6 +111,7 @@ fun EpgNavigationContainer(
                     },
                     onRecordClick = { /* 予約 */ },
                     onBackClick = {
+                        // 詳細から戻った時は、元の番組セルにフォーカスを戻す
                         runCatching { contentRequester.requestFocus() }
                         internalRestoreChannelId = selectedProgram.channel_id
                         internalRestoreStartTime = selectedProgram.start_time
@@ -120,10 +122,13 @@ fun EpgNavigationContainer(
             }
             LaunchedEffect(selectedProgram) {
                 yield()
+                // 詳細表示時の初期フォーカスを安全に要求
                 runCatching { detailInitialFocusRequester.requestFocus() }
             }
         }
 
+        // ★修正: 復元IDがある場合のみ（再生終了後など）フォーカスを本体へ移動
+        // これにより、通常のタブ切り替え時にはフォーカスがトップナビに残ります
         LaunchedEffect(internalRestoreChannelId) {
             if (internalRestoreChannelId != null) {
                 delay(100)

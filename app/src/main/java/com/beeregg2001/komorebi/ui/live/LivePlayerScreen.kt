@@ -150,10 +150,12 @@ fun LivePlayerScreen(
         }
     }
 
-    // ★追加: 起動直後の「Offline」を一定時間許容する遅延評価ロジック
-    // sseStatus が変更されるたびに自動でキャンセル・再スタートします
+    // ★修正: 起動直後の「Offline」を一定時間許容する遅延評価ロジック
     LaunchedEffect(sseStatus, sseDetail) {
         if (sseStatus == "Offline") {
+            // すでに致命的なエラーとして即時判定されている場合は何もしない
+            if (playerError != null) return@LaunchedEffect
+
             delay(6000) // 6秒間猶予を与える（この間にStandbyやONAirに変わればエラーにならない）
             if (sseStatus == "Offline" && playerError == null) {
                 playerError = sseDetail.ifEmpty { AppStrings.SSE_OFFLINE }
@@ -175,9 +177,16 @@ fun LivePlayerScreen(
                     sseStatus = json.optString("status", "Unknown")
                     sseDetail = json.optString("detail", "読み込み中...")
 
+                    // ★追加: 致命的なエラーや起動失敗が含まれる場合は即座にエラーダイアログを表示し、プレイヤーを停止する
+                    if (sseStatus == "Error" ||
+                        (sseStatus == "Offline" && (sseDetail.contains("失敗") || sseDetail.contains("エラー")))) {
+                        playerError = sseDetail.ifEmpty { "チューナーの起動に失敗しました" }
+                        exoPlayer.stop() // 不要な読み込みを停止させる
+                        return@runCatching
+                    }
+
                     when (sseStatus) {
-                        // ★変更: 即座にエラーにせず、LaunchedEffect の遅延評価に任せるためここでは playerError に代入しない
-                        "Offline" -> { /* Delay handled by LaunchedEffect */ }
+                        "Offline" -> { /* LaunchedEffect の遅延評価に任せる */ }
                         "Standby" -> { if (exoPlayer.isPlaying) exoPlayer.pause() }
                         "ONAir" -> { if (!exoPlayer.isPlaying && playerError == null) exoPlayer.play() }
                     }
@@ -271,7 +280,7 @@ fun LivePlayerScreen(
             modifier = Modifier.fillMaxSize().focusRequester(mainFocusRequester).focusable().alpha(if (sseStatus == "ONAir" || currentStreamSource != StreamSource.KONOMITV) 1f else 0f)
         )
 
-        // ★変更: Offlineの猶予期間中もローディングインジケーターを表示し続けるように条件を緩和
+        // 読み込み中表示
         AnimatedVisibility(
             visible = currentStreamSource == StreamSource.KONOMITV && (sseStatus == "Standby" || sseStatus == "Offline") && playerError == null,
             enter = fadeIn(), exit = fadeOut()

@@ -104,12 +104,12 @@ fun MainRootScreen(
 
             selectedChannel != null -> {
                 selectedChannel = null
-                isReturningFromPlayer = true // ★追加
+                isReturningFromPlayer = true // ★戻る時はフラグを立てる
             }
             selectedProgram != null -> {
                 selectedProgram = null
                 showPlayerControls = true
-                isReturningFromPlayer = true // ★追加
+                isReturningFromPlayer = true // ★戻る時はフラグを立てる
             }
             isSettingsOpen -> isSettingsOpen = false
             epgSelectedProgram != null -> epgSelectedProgram = null
@@ -165,14 +165,14 @@ fun MainRootScreen(
                         onSubMenuToggle = { playerIsSubMenuOpen = it },
                         onChannelSelect = { newChannel ->
                             selectedChannel = newChannel
-                            lastSelectedChannelId = newChannel.id
+                            lastSelectedChannelId = newChannel.id // ★ミニリストでの変更を保存
                             lastSelectedProgramId = null
                             homeViewModel.saveLastChannel(newChannel)
-                            isReturningFromPlayer = false // ★追加
+                            isReturningFromPlayer = false // 再生中はフラグを下ろす
                         },
                         onBackPressed = {
                             selectedChannel = null
-                            isReturningFromPlayer = true // ★追加
+                            isReturningFromPlayer = true // ★戻る時はフラグを立てる
                         }
                     )
                 } else if (selectedProgram != null) {
@@ -188,7 +188,7 @@ fun MainRootScreen(
                         onSceneSearchToggle = { isPlayerSceneSearchOpen = it },
                         onBackPressed = {
                             selectedProgram = null
-                            isReturningFromPlayer = true // ★追加
+                            isReturningFromPlayer = true // ★戻る時はフラグを立てる
                         },
                         onUpdateWatchHistory = { prog, pos ->
                             recordViewModel.updateWatchHistory(prog, pos)
@@ -214,7 +214,7 @@ fun MainRootScreen(
                                 lastSelectedChannelId = channel.id
                                 lastSelectedProgramId = null
                                 homeViewModel.saveLastChannel(channel)
-                                isReturningFromPlayer = false // ★追加
+                                isReturningFromPlayer = false
                             }
                         },
                         selectedProgram = selectedProgram,
@@ -224,7 +224,7 @@ fun MainRootScreen(
                                 lastSelectedProgramId = program.id.toString()
                                 lastSelectedChannelId = null
                                 showPlayerControls = true
-                                isReturningFromPlayer = false // ★追加
+                                isReturningFromPlayer = false
                             }
                         },
                         epgSelectedProgram = epgSelectedProgram,
@@ -244,7 +244,7 @@ fun MainRootScreen(
                                 homeViewModel.saveLastChannel(channel)
                                 epgSelectedProgram = null
                                 isEpgJumpMenuOpen = false
-                                isReturningFromPlayer = false // ★追加
+                                isReturningFromPlayer = false
                             }
                         },
                         lastPlayerChannelId = lastSelectedChannelId,
@@ -254,8 +254,8 @@ fun MainRootScreen(
                         isRecordListOpen = isRecordListOpen,
                         onShowAllRecordings = { isRecordListOpen = true },
                         onCloseRecordList = { isRecordListOpen = false },
-                        isReturningFromPlayer = isReturningFromPlayer, // ★追加
-                        onReturnFocusConsumed = { isReturningFromPlayer = false } // ★追加
+                        isReturningFromPlayer = isReturningFromPlayer, // ★フラグを渡す
+                        onReturnFocusConsumed = { isReturningFromPlayer = false } // ★フラグをリセットするコールバック
                     )
                 }
             }
@@ -299,7 +299,6 @@ fun MainRootScreen(
     }
 }
 
-// Dialogs omitted for brevity
 @OptIn(ExperimentalTvMaterial3Api::class)
 @Composable
 fun InitialSetupDialog(onConfirm: () -> Unit) {

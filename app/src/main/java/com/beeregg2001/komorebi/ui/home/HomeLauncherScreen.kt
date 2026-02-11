@@ -3,12 +3,14 @@ package com.beeregg2001.komorebi.ui.home
 import android.os.Build
 import androidx.annotation.RequiresApi
 import androidx.compose.animation.*
+import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
 import androidx.compose.foundation.focusGroup
 import androidx.compose.foundation.focusable
 import androidx.compose.foundation.layout.*
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Settings
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.runtime.*
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
@@ -73,9 +75,14 @@ fun HomeLauncherScreen(
     val tabs = listOf("ホーム", "ライブ", "番組表", "ビデオ")
     var selectedTabIndex by rememberSaveable { mutableIntStateOf(initialTabIndex) }
 
+    LaunchedEffect(initialTabIndex) {
+        if (selectedTabIndex != initialTabIndex) {
+            selectedTabIndex = initialTabIndex
+        }
+    }
+
     val isFullScreenMode = (selectedChannel != null) || (selectedProgram != null) ||
             (epgSelectedProgram != null) || isSettingsOpen
-    var isNavigatingToTabRow by remember { mutableStateOf(false) }
 
     val epgUiState = epgViewModel.uiState
     val currentBroadcastingType by epgViewModel.selectedBroadcastingType.collectAsState()
@@ -106,20 +113,30 @@ fun HomeLauncherScreen(
     val tabFocusRequesters = remember { List(tabs.size) { FocusRequester() } }
     val settingsFocusRequester = remember { FocusRequester() }
     val contentFirstItemRequesters = remember { List(tabs.size) { FocusRequester() } }
-    var tabRowHasFocus by remember { mutableStateOf(false) }
+
+    var topNavHasFocus by remember { mutableStateOf(false) }
 
     val availableTypes = remember(groupedChannels) {
         groupedChannels.keys.toList()
     }
 
+    var internalLastPlayerChannelId by remember(lastPlayerChannelId) { mutableStateOf(lastPlayerChannelId) }
+
     LaunchedEffect(triggerBack) {
         if (triggerBack) {
-            if (selectedTabIndex > 0) {
-                selectedTabIndex = 0
-                onTabChange(0)
-                tabFocusRequesters[0].requestFocus()
+            if (!topNavHasFocus) {
+                runCatching {
+                    tabFocusRequesters[selectedTabIndex].requestFocus()
+                }
             } else {
-                onFinalBack()
+                if (selectedTabIndex > 0) {
+                    selectedTabIndex = 0
+                    onTabChange(0)
+                    delay(50)
+                    runCatching { tabFocusRequesters[0].requestFocus() }
+                } else {
+                    onFinalBack()
+                }
             }
             onBackTriggered()
         }
@@ -146,10 +163,18 @@ fun HomeLauncherScreen(
         }
     }
 
+    // ★修正: プレイヤー復帰時のフォーカス復元（ホームタブはタブへ戻るように修正）
     LaunchedEffect(isReturningFromPlayer, selectedTabIndex) {
-        if (isReturningFromPlayer && selectedTabIndex != 0) {
+        if (isReturningFromPlayer) {
             delay(150)
-            runCatching { contentFirstItemRequesters[selectedTabIndex].requestFocus() }
+            if (selectedTabIndex == 0) {
+                // ホームタブの場合はトップナビ（タブ）にフォーカスを戻す
+                runCatching { tabFocusRequesters[0].requestFocus() }
+            } else if (selectedTabIndex == 3) {
+                // 録画リストなどの場合はコンテンツにフォーカスを戻す（既存挙動維持）
+                runCatching { contentFirstItemRequesters[selectedTabIndex].requestFocus() }
+            }
+            // ライブタブ(index 1)は LiveContent 内部で処理される
             onReturnFocusConsumed()
         }
     }
@@ -168,15 +193,14 @@ fun HomeLauncherScreen(
                 Row(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .padding(top = 18.dp, start = 40.dp, end = 40.dp),
+                        .padding(top = 18.dp, start = 40.dp, end = 40.dp)
+                        .onFocusChanged { topNavHasFocus = it.hasFocus },
                     verticalAlignment = Alignment.CenterVertically
                 ) {
                     TabRow(
                         selectedTabIndex = selectedTabIndex,
                         modifier = Modifier
                             .weight(1f)
-                            .focusable(!isFullScreenMode)
-                            .onFocusChanged { tabRowHasFocus = it.hasFocus }
                             .focusGroup(),
                         indicator = { tabPositions, doesTabRowHaveFocus ->
                             TabRowDefaults.UnderlinedIndicator(
@@ -190,15 +214,16 @@ fun HomeLauncherScreen(
                             Tab(
                                 selected = selectedTabIndex == index,
                                 onFocus = {
-                                    if (!isNavigatingToTabRow && selectedTabIndex != index) {
+                                    if (selectedTabIndex != index) {
                                         selectedTabIndex = index
                                         onTabChange(index)
+                                        onReturnFocusConsumed()
                                     }
                                 },
                                 modifier = Modifier
                                     .focusRequester(tabFocusRequesters[index])
                                     .focusProperties {
-                                        down = FocusRequester.Default
+                                        down = contentFirstItemRequesters[index]
                                         if (index == tabs.size - 1) {
                                             right = settingsFocusRequester
                                         }
@@ -220,12 +245,13 @@ fun HomeLauncherScreen(
                             .focusRequester(settingsFocusRequester)
                             .focusProperties {
                                 left = tabFocusRequesters.last()
+                                down = contentFirstItemRequesters[selectedTabIndex]
                             }
                     ) {
                         Icon(
                             imageVector = Icons.Default.Settings,
                             contentDescription = "設定",
-                            tint = if (tabRowHasFocus || !isSettingsOpen) Color.White else Color.Gray
+                            tint = if (topNavHasFocus || !isSettingsOpen) Color.White else Color.Gray
                         )
                     }
                 }
@@ -236,13 +262,12 @@ fun HomeLauncherScreen(
                     targetState = selectedTabIndex,
                     contentKey = { it },
                     transitionSpec = {
-                        fadeIn(animationSpec = androidx.compose.animation.core.tween(150)) togetherWith
-                                fadeOut(animationSpec = androidx.compose.animation.core.tween(150))
+                        fadeIn(animationSpec = tween(150)) togetherWith
+                                fadeOut(animationSpec = tween(150))
                     },
                     label = "TabContentTransition"
                 ) { targetIndex ->
 
-                    // ★ローディング遅延とProgressIndicatorを完全に削除し、常にコンテンツを直描き
                     Box(modifier = Modifier.fillMaxSize().padding(horizontal = 0.dp)) {
                         when (targetIndex) {
                             0 -> {
@@ -257,7 +282,7 @@ fun HomeLauncherScreen(
                                     mirakurunPort = mirakurunPort,
                                     externalFocusRequester = contentFirstItemRequesters[0],
                                     tabFocusRequester = tabFocusRequesters[0],
-                                    lastFocusedChannelId = lastPlayerChannelId,
+                                    lastFocusedChannelId = internalLastPlayerChannelId,
                                     lastFocusedProgramId = lastPlayerProgramId
                                 )
                             }
@@ -267,14 +292,16 @@ fun HomeLauncherScreen(
                                     selectedChannel = selectedChannel,
                                     lastWatchedChannel = null,
                                     onChannelClick = onChannelClick,
-                                    onFocusChannelChange = { },
+                                    onFocusChannelChange = { channelId ->
+                                        internalLastPlayerChannelId = channelId
+                                    },
                                     mirakurunIp = mirakurunIp,
                                     mirakurunPort = mirakurunPort,
                                     konomiIp = konomiIp, konomiPort = konomiPort,
                                     topNavFocusRequester = tabFocusRequesters[1],
                                     contentFirstItemRequester = contentFirstItemRequesters[1],
                                     onPlayerStateChanged = { },
-                                    lastFocusedChannelId = lastPlayerChannelId,
+                                    lastFocusedChannelId = internalLastPlayerChannelId,
                                     isReturningFromPlayer = isReturningFromPlayer && selectedTabIndex == 1,
                                     onReturnFocusConsumed = onReturnFocusConsumed
                                 )
@@ -296,7 +323,7 @@ fun HomeLauncherScreen(
                                     onTypeChanged = { newType ->
                                         epgViewModel.updateBroadcastingType(newType)
                                     },
-                                    restoreChannelId = if (isReturningFromPlayer && selectedTabIndex == 2) lastPlayerChannelId else null,
+                                    restoreChannelId = if (isReturningFromPlayer && selectedTabIndex == 2) internalLastPlayerChannelId else null,
                                     availableTypes = availableTypes
                                 )
                             }

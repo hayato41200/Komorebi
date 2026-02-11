@@ -51,25 +51,24 @@ fun LiveContent(
     contentFirstItemRequester: FocusRequester,
     onPlayerStateChanged: (Boolean) -> Unit,
     lastFocusedChannelId: String? = null,
-    isReturningFromPlayer: Boolean = false, // ★追加
-    onReturnFocusConsumed: () -> Unit = {}  // ★追加
+    isReturningFromPlayer: Boolean = false,
+    onReturnFocusConsumed: () -> Unit = {}
 ) {
     val listState = rememberTvLazyListState()
-    var internalLastFocusedId by rememberSaveable { mutableStateOf<String?>(null) }
-
     val targetChannelFocusRequester = remember { FocusRequester() }
     val isPlayerActive = selectedChannel != null
 
-    // ★修正: Stateだけ伝播させ、無条件なフォーカス要求は削除
     LaunchedEffect(isPlayerActive) {
         onPlayerStateChanged(isPlayerActive)
     }
 
-    // ★修正: プレイヤーから戻ってきた時のみターゲットカードへフォーカスを当てる（タブ切り替え時は発火させない）
+    // ★修正: プレイヤーからの復帰時のみ発火させる
     LaunchedEffect(isReturningFromPlayer) {
         if (isReturningFromPlayer) {
             delay(150)
-            runCatching { targetChannelFocusRequester.requestFocus() }
+            runCatching {
+                targetChannelFocusRequester.requestFocus()
+            }
             onReturnFocusConsumed()
         }
     }
@@ -105,7 +104,8 @@ fun LiveContent(
                             modifier = Modifier.fillMaxWidth().graphicsLayer(clip = false)
                         ) {
                             items(channels, key = { it.id }, contentType = { "ChannelCard" }) { channel ->
-                                val isTarget = channel.id == selectedChannel?.id || (selectedChannel == null && channel.id == lastFocusedChannelId)
+                                // ★修正: 最後に視聴していたチャンネルにターゲットを絞る
+                                val isTarget = channel.id == lastFocusedChannelId
 
                                 ChannelWideCard(
                                     channel = channel,
@@ -124,7 +124,6 @@ fun LiveContent(
                                         }
                                         .onFocusChanged {
                                             if (it.isFocused) {
-                                                internalLastFocusedId = channel.id
                                                 onFocusChannelChange(channel.id)
                                             }
                                         }
