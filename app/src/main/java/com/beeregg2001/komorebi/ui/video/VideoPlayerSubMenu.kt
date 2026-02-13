@@ -19,14 +19,21 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.tv.material3.*
 
+enum class ChapterKeyBinding(val label: String) {
+    DPAD_UP_DOWN("上下キー"),
+    COLOR_KEYS("色ボタン")
+}
+
 @OptIn(ExperimentalTvMaterial3Api::class)
 @Composable
 fun VideoTopSubMenuUI(
     currentAudioMode: AudioMode,
     currentSpeed: Float,
+    currentChapterKeyBinding: ChapterKeyBinding,
     focusRequester: FocusRequester,
     onAudioToggle: () -> Unit,
-    onSpeedToggle: () -> Unit
+    onSpeedToggle: () -> Unit,
+    onChapterKeyBindingToggle: () -> Unit
 ) {
     LaunchedEffect(Unit) { focusRequester.requestFocus() }
 
@@ -43,6 +50,13 @@ fun VideoTopSubMenuUI(
                 title = "再生速度", icon = Icons.Default.FastForward,
                 subtitle = "${currentSpeed}x",
                 onClick = onSpeedToggle,
+                modifier = Modifier
+            )
+            Spacer(Modifier.width(20.dp))
+            VideoMenuTileItem(
+                title = "チャプター操作キー", icon = Icons.Default.PlayArrow,
+                subtitle = currentChapterKeyBinding.label,
+                onClick = onChapterKeyBindingToggle,
                 modifier = Modifier.focusProperties { right = FocusRequester.Cancel }
             )
         }

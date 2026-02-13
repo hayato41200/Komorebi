@@ -19,7 +19,13 @@ data class RecordedProgram(
     val duration: Double,
     @SerializedName("is_partially_recorded") val isPartiallyRecorded: Boolean,
     @SerializedName("recorded_video") val recordedVideo: RecordedVideo,
+    val chapters: List<RecordedChapter> = emptyList(),
     // 必要に応じて detail (出演者など) も追加可能
+)
+
+data class RecordedChapter(
+    val title: String,
+    @SerializedName("position_seconds") val positionSeconds: Long
 )
 
 // 実際のビデオファイル情報（サムネイルや再生に使用）
