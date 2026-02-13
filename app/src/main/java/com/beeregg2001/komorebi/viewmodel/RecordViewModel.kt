@@ -4,18 +4,23 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.beeregg2001.komorebi.data.model.RecordedProgram
 import com.beeregg2001.komorebi.data.repository.KonomiRepository
+import com.beeregg2001.komorebi.data.repository.MyListRepository
 import com.beeregg2001.komorebi.data.repository.WatchHistoryRepository
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 import javax.inject.Inject
 
 @HiltViewModel
 class RecordViewModel @Inject constructor(
     private val repository: KonomiRepository,
-    private val historyRepository: WatchHistoryRepository // ★追加: 履歴リポジトリを注入
+    private val historyRepository: WatchHistoryRepository, // ★追加: 履歴リポジトリを注入
+    private val myListRepository: MyListRepository
 ) : ViewModel() {
 
     // 録画リスト（全ページ分を蓄積）
@@ -35,6 +40,15 @@ class RecordViewModel @Inject constructor(
     private var totalItems = 0
     private var hasMorePages = true
     private val pageSize = 30
+
+    val myListIds: StateFlow<Set<Int>> = myListRepository.getMyList()
+        .map { entities -> entities.map { it.programId }.toSet() }
+        .stateIn(
+            scope = viewModelScope,
+            started = SharingStarted.WhileSubscribed(5000),
+            initialValue = emptySet()
+        )
+
 
     init {
         fetchInitialRecordings()
@@ -111,6 +125,19 @@ class RecordViewModel @Inject constructor(
                 _isLoadingMore.value = false
             }
         }
+    }
+
+
+    fun addToMyList(programId: Int) {
+        viewModelScope.launch { myListRepository.add(programId) }
+    }
+
+    fun removeFromMyList(programId: Int) {
+        viewModelScope.launch { myListRepository.remove(programId) }
+    }
+
+    fun toggleMyList(programId: Int) {
+        if (myListIds.value.contains(programId)) removeFromMyList(programId) else addToMyList(programId)
     }
 
     /**

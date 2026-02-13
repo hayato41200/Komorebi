@@ -15,8 +15,7 @@ import com.beeregg2001.komorebi.data.local.entity.buildChannelRecordingKey
 import com.beeregg2001.komorebi.data.local.entity.buildProgramReservationKey
 import com.beeregg2001.komorebi.data.model.EpgChannelResponse
 import com.beeregg2001.komorebi.data.model.EpgChannelWrapper
-import kotlinx.coroutines.flow.Flow
-import retrofit2.HttpException
+import com.beeregg2001.komorebi.data.model.EpgProgram
 import retrofit2.http.GET
 import retrofit2.http.Query
 import java.io.IOException
@@ -82,167 +81,26 @@ class EpgRepository @Inject constructor(
         }
     }
 
-    fun observeProgramReservation(programId: String): Flow<ReservationEntity?> {
-        return reservationDao.observeByKey(buildProgramReservationKey(programId))
-    }
-
-    fun observeChannelRecording(channelId: String): Flow<ReservationEntity?> {
-        return reservationDao.observeByKey(buildChannelRecordingKey(channelId))
-    }
-
-    suspend fun toggleProgramReservation(
-        programId: String,
-        channelId: String,
-        title: String,
-        startAt: String?,
-        endAt: String?
-    ): TaskActionResult {
-        val key = buildProgramReservationKey(programId)
-        val current = reservationDao.getByKey(key)
-        val shouldReserve = current?.isReserved != true
-
-        saveState(
-            ReservationEntity(
-                key = key,
-                targetType = "program",
-                targetId = programId,
-                channelId = channelId,
-                title = title,
-                startAt = startAt,
-                endAt = endAt,
-                isReserved = current?.isReserved == true,
-                isRecording = current?.isRecording == true,
-                status = ReservationStatus.LOADING.value
+    @RequiresApi(Build.VERSION_CODES.O)
+    suspend fun fetchNowAndNextPrograms(channelId: String): Result<List<EpgProgram>> {
+        return try {
+            val now = OffsetDateTime.now()
+            val formatter = DateTimeFormatter.ISO_OFFSET_DATE_TIME
+            val response = apiService.getEpgPrograms(
+                startTime = now.minusHours(1).format(formatter),
+                endTime = now.plusHours(6).format(formatter),
+                pinnedChannelIds = channelId
             )
-        )
-
-        return runCatching {
-            if (shouldReserve) konomiApi.reserveProgram(programId) else konomiApi.cancelProgramReservation(programId)
-        }.fold(
-            onSuccess = {
-                saveState(
-                    ReservationEntity(
-                        key = key,
-                        targetType = "program",
-                        targetId = programId,
-                        channelId = channelId,
-                        title = title,
-                        startAt = startAt,
-                        endAt = endAt,
-                        isReserved = shouldReserve,
-                        status = ReservationStatus.SUCCESS.value
-                    )
-                )
-                TaskActionResult(success = true)
-            },
-            onFailure = { throwable ->
-                val mapped = mapError(throwable)
-                saveState(
-                    ReservationEntity(
-                        key = key,
-                        targetType = "program",
-                        targetId = programId,
-                        channelId = channelId,
-                        title = title,
-                        startAt = startAt,
-                        endAt = endAt,
-                        isReserved = current?.isReserved == true,
-                        status = ReservationStatus.ERROR.value,
-                        errorType = mapped.errorType?.toReservationErrorType(),
-                        errorDetail = mapped.detail
-                    )
-                )
-                mapped
-            }
-        )
-    }
-
-    suspend fun startChannelRecording(channelId: String, channelName: String): TaskActionResult {
-        val key = buildChannelRecordingKey(channelId)
-        val current = reservationDao.getByKey(key)
-
-        saveState(
-            ReservationEntity(
-                key = key,
-                targetType = "channel",
-                targetId = channelId,
-                channelId = channelId,
-                title = channelName,
-                startAt = null,
-                endAt = null,
-                isRecording = current?.isRecording == true,
-                status = ReservationStatus.LOADING.value
-            )
-        )
-
-        return runCatching {
-            konomiApi.startChannelRecording(StartRecordingRequest(channelId))
-        }.fold(
-            onSuccess = {
-                saveState(
-                    ReservationEntity(
-                        key = key,
-                        targetType = "channel",
-                        targetId = channelId,
-                        channelId = channelId,
-                        title = channelName,
-                        startAt = null,
-                        endAt = null,
-                        isRecording = true,
-                        status = ReservationStatus.SUCCESS.value
-                    )
-                )
-                TaskActionResult(success = true)
-            },
-            onFailure = { throwable ->
-                val mapped = mapError(throwable)
-                saveState(
-                    ReservationEntity(
-                        key = key,
-                        targetType = "channel",
-                        targetId = channelId,
-                        channelId = channelId,
-                        title = channelName,
-                        startAt = null,
-                        endAt = null,
-                        isRecording = current?.isRecording == true,
-                        status = ReservationStatus.ERROR.value,
-                        errorType = mapped.errorType?.toReservationErrorType(),
-                        errorDetail = mapped.detail
-                    )
-                )
-                mapped
-            }
-        )
-    }
-
-    private suspend fun saveState(entity: ReservationEntity) {
-        reservationDao.upsert(entity.copy(updatedAt = System.currentTimeMillis()))
-    }
-
-    private fun mapError(throwable: Throwable): TaskActionResult {
-        if (throwable is IOException) {
-            return TaskActionResult(false, TaskErrorType.NETWORK, "ネットワークに接続できません。")
+            val programs = response.channels.firstOrNull()?.programs.orEmpty()
+                .filter { program ->
+                    runCatching { OffsetDateTime.parse(program.end_time).isAfter(now) }.getOrDefault(false)
+                }
+                .sortedBy { it.start_time }
+                .take(2)
+            Result.success(programs)
+        } catch (e: Exception) {
+            Result.failure(e)
         }
-        if (throwable is HttpException) {
-            val body = throwable.response()?.errorBody()?.string().orEmpty()
-            val message = if (body.isNotBlank()) body else throwable.message()
-            val lower = message.lowercase()
-            return when {
-                lower.contains("tuner") || message.contains("チューナー") || throwable.code() == 503 ->
-                    TaskActionResult(false, TaskErrorType.TUNER_SHORTAGE, "チューナーが不足しています。")
-                lower.contains("duplicate") || message.contains("重複") || throwable.code() == 409 ->
-                    TaskActionResult(false, TaskErrorType.DUPLICATED, "同一時間帯の重複予約です。")
-                else -> TaskActionResult(false, TaskErrorType.UNKNOWN, message.ifBlank { "予約/録画処理に失敗しました。" })
-            }
-        }
-        return TaskActionResult(false, TaskErrorType.UNKNOWN, throwable.message ?: "予約/録画処理に失敗しました。")
     }
-}
 
-private fun TaskErrorType.toReservationErrorType(): String = when (this) {
-    TaskErrorType.TUNER_SHORTAGE -> ReservationErrorType.TUNER_SHORTAGE.value
-    TaskErrorType.DUPLICATED -> ReservationErrorType.DUPLICATED.value
-    TaskErrorType.NETWORK -> ReservationErrorType.NETWORK.value
-    TaskErrorType.UNKNOWN -> ReservationErrorType.UNKNOWN.value
 }

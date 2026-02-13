@@ -10,6 +10,7 @@ import com.beeregg2001.komorebi.data.local.entity.toKonomiHistoryProgram
 import com.beeregg2001.komorebi.data.model.KonomiHistoryProgram
 import com.beeregg2001.komorebi.data.model.RecordedProgram
 import com.beeregg2001.komorebi.data.repository.KonomiRepository
+import com.beeregg2001.komorebi.data.repository.PinnedChannelRepository
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
@@ -22,7 +23,8 @@ import javax.inject.Inject
 
 @HiltViewModel
 class HomeViewModel @Inject constructor(
-    private val repository: KonomiRepository
+    private val repository: KonomiRepository,
+    private val pinnedChannelRepository: PinnedChannelRepository
 ) : ViewModel() {
 
     // 読み込み状態の管理
@@ -70,6 +72,15 @@ class HomeViewModel @Inject constructor(
             initialValue = emptyList() // ★ 初期値も空リストに変更
         )
 
+    val pinnedChannelIds: StateFlow<List<String>> = pinnedChannelRepository.getPinnedChannels()
+        .map { it.map { entity -> entity.channelId } }
+        .stateIn(
+            scope = viewModelScope,
+            started = SharingStarted.WhileSubscribed(5000),
+            initialValue = emptyList()
+        )
+
+
     init {
         // 初回起動時にデータを同期
         refreshHomeData()
@@ -109,6 +120,15 @@ class HomeViewModel @Inject constructor(
         viewModelScope.launch {
             repository.saveToLocalHistory(program.toEntity())
         }
+    }
+
+
+    fun pinChannel(channelId: String) {
+        viewModelScope.launch { pinnedChannelRepository.pinChannel(channelId) }
+    }
+
+    fun unpinChannel(channelId: String) {
+        viewModelScope.launch { pinnedChannelRepository.unpinChannel(channelId) }
     }
 
     fun saveLastChannel(channel: Channel) {

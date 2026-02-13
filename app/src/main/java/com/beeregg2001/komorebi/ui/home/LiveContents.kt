@@ -55,7 +55,8 @@ fun LiveContent(
     lastFocusedChannelId: String? = null,
     isReturningFromPlayer: Boolean = false,
     onReturnFocusConsumed: () -> Unit = {},
-    epgViewModel: EpgViewModel
+    pinnedChannelIds: List<String> = emptyList(),
+    onPinToggle: (String, Boolean) -> Unit = { _, _ -> }
 ) {
     val listState = rememberTvLazyListState()
     val targetChannelFocusRequester = remember { FocusRequester() }
@@ -87,10 +88,14 @@ fun LiveContent(
             verticalArrangement = Arrangement.spacedBy(20.dp)
         ) {
             val sortedKeys = groupedChannels.keys.toList()
+            val pinnedSet = pinnedChannelIds.toSet()
 
             sortedKeys.forEachIndexed { rowIndex, key ->
                 val displayCategory = if (key == "GR") "地デジ" else key
-                val channels = groupedChannels[key] ?: emptyList()
+                val channels = (groupedChannels[key] ?: emptyList()).sortedBy { channel ->
+                    val pinnedIndex = pinnedChannelIds.indexOf(channel.id)
+                    if (pinnedIndex >= 0) pinnedIndex else Int.MAX_VALUE
+                }
 
                 item(key = key, contentType = "CategoryRow") {
                     Column(modifier = Modifier.fillMaxWidth().graphicsLayer(clip = false)) {
@@ -118,6 +123,8 @@ fun LiveContent(
                                     konomiPort = konomiPort,
                                     globalTick = 0,
                                     onClick = { onChannelClick(channel) },
+                                    isPinned = pinnedSet.contains(channel.id),
+                                    onPinToggle = { shouldPin -> onPinToggle(channel.id, shouldPin) },
                                     modifier = Modifier
                                         .then(if (isTarget) Modifier.focusRequester(targetChannelFocusRequester) else Modifier)
                                         .focusProperties {
@@ -166,17 +173,8 @@ fun LiveContent(
                 onSubMenuToggle = { isSubMenuOpen = it },
                 onChannelSelect = { onChannelClick(it) },
                 onBackPressed = { onChannelClick(null) },
-                recordingState = recordingState,
-                onStartRecordingClick = {
-                    scope.launch {
-                        epgViewModel.startChannelRecording(selectedChannel.id, selectedChannel.name)
-                    }
-                },
-                onRetryRecordingClick = {
-                    scope.launch {
-                        epgViewModel.startChannelRecording(selectedChannel.id, selectedChannel.name)
-                    }
-                }
+                pinnedChannelIds = pinnedChannelIds,
+                onPinToggle = onPinToggle
             )
         }
     }
@@ -193,6 +191,8 @@ fun ChannelWideCard(
     konomiPort: String,
     globalTick: Int,
     onClick: () -> Unit,
+    isPinned: Boolean = false,
+    onPinToggle: (Boolean) -> Unit = {},
     modifier: Modifier = Modifier
 ) {
     var isFocused by remember { mutableStateOf(false) }
@@ -225,6 +225,7 @@ fun ChannelWideCard(
 
     Surface(
         onClick = onClick,
+        onLongClick = { onPinToggle(!isPinned) },
         modifier = modifier
             .width(160.dp)
             .height(72.dp)
@@ -236,7 +237,7 @@ fun ChannelWideCard(
         shape = ClickableSurfaceDefaults.shape(MaterialTheme.shapes.small),
         scale = ClickableSurfaceDefaults.scale(focusedScale = 1.0f),
         colors = ClickableSurfaceDefaults.colors(
-            containerColor = Color.White.copy(alpha = 0.06f),
+            containerColor = if (isPinned) Color(0x33FFD54F) else Color.White.copy(alpha = 0.06f),
             focusedContainerColor = Color.White,
             contentColor = Color.White,
             focusedContentColor = Color.Black
@@ -295,6 +296,14 @@ fun ChannelWideCard(
                         )
                     )
                 }
+            }
+            if (isPinned) {
+                Text(
+                    text = "★",
+                    color = if (isFocused) Color(0xFFFFC107) else Color(0xFFFFD54F),
+                    fontSize = 10.sp,
+                    modifier = Modifier.padding(start = 6.dp)
+                )
             }
             if (channel.programPresent != null) {
                 Box(

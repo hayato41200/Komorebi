@@ -8,6 +8,7 @@ import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.List
+import androidx.compose.material.icons.filled.Star
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -17,6 +18,7 @@ import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.input.key.onKeyEvent
 import androidx.compose.ui.unit.dp
 import androidx.tv.foundation.lazy.list.TvLazyColumn
 import androidx.tv.foundation.lazy.list.TvLazyRow
@@ -41,9 +43,15 @@ fun VideoTabContent(
     onProgramClick: (RecordedProgram) -> Unit,
     onLoadMore: () -> Unit = {},
     isLoadingMore: Boolean = false,
-    onShowAllRecordings: () -> Unit = {}
+    onShowAllRecordings: () -> Unit = {},
+    myListIds: Set<Int> = emptySet(),
+    onMyListToggle: (Int) -> Unit = {}
 ) {
     val listState = rememberTvLazyListState()
+    var showMyListOnly by remember { mutableStateOf(false) }
+    val visibleRecentRecordings = remember(recentRecordings, myListIds, showMyListOnly) {
+        if (showMyListOnly) recentRecordings.filter { myListIds.contains(it.id) } else recentRecordings
+    }
 
     TvLazyColumn(
         state = listState,
@@ -53,6 +61,13 @@ fun VideoTabContent(
             .fillMaxSize()
             .focusRequester(contentFirstItemRequester)
     ) {
+        item {
+            Row(modifier = Modifier.padding(horizontal = 32.dp), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                Button(onClick = { showMyListOnly = false }, colors = ButtonDefaults.colors(containerColor = if (!showMyListOnly) Color.White else Color.White.copy(alpha = 0.2f), contentColor = if (!showMyListOnly) Color.Black else Color.White)) { Text("通常一覧") }
+                Button(onClick = { showMyListOnly = true }, colors = ButtonDefaults.colors(containerColor = if (showMyListOnly) Color.White else Color.White.copy(alpha = 0.2f), contentColor = if (showMyListOnly) Color.Black else Color.White)) { Text("マイリスト") }
+            }
+        }
+
         // 1. 視聴履歴
         item {
             if (watchHistory.isNotEmpty()) {
@@ -72,10 +87,11 @@ fun VideoTabContent(
         // 2. 最近の録画
         item {
             VideoSectionRow(
-                title = "最近の録画", items = recentRecordings, selectedProgramId = selectedProgram?.id,
+                title = "最近の録画", items = visibleRecentRecordings, selectedProgramId = selectedProgram?.id,
                 konomiIp = konomiIp, konomiPort = konomiPort, onProgramClick = onProgramClick,
                 isFirstSection = watchHistory.isEmpty(),
-                topNavFocusRequester = if (watchHistory.isEmpty()) topNavFocusRequester else null
+                topNavFocusRequester = if (watchHistory.isEmpty()) topNavFocusRequester else null,
+                onCardLongPress = { onMyListToggle(it.id) }
             )
         }
 
@@ -113,7 +129,8 @@ fun VideoSectionRow(
     konomiPort: String,
     onProgramClick: (RecordedProgram) -> Unit,
     isFirstSection: Boolean = false,
-    topNavFocusRequester: FocusRequester? = null
+    topNavFocusRequester: FocusRequester? = null,
+    onCardLongPress: (RecordedProgram) -> Unit = {}
 ) {
     val watchedProgramFocusRequester = remember { FocusRequester() }
 
@@ -140,6 +157,12 @@ fun VideoSectionRow(
                     program = program, konomiIp = konomiIp, konomiPort = konomiPort, onClick = { onProgramClick(program) },
                     modifier = Modifier
                         .onFocusChanged { isFocused = it.isFocused } // ★追加: 状態検知
+                        .onKeyEvent { event ->
+                            if (event.type == androidx.compose.ui.input.key.KeyEventType.KeyDown && event.key == androidx.compose.ui.input.key.Key.Menu) {
+                                onCardLongPress(program)
+                                true
+                            } else false
+                        }
                         .then(if (isFocused) Modifier.border(2.dp, Color.White, RoundedCornerShape(8.dp)) else Modifier) // ★追加: 白枠
                         .then(if (index == 0 && isFirstSection) Modifier else Modifier)
                         .then(if (isSelected) Modifier.focusRequester(watchedProgramFocusRequester) else Modifier)
