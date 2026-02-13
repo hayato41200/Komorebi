@@ -71,7 +71,8 @@ data class KonomiHistoryProgram(
                 containerFormat = "",
                 videoCodec = "",
                 audioCodec = ""
-            )
+            ),
+            chapters = emptyList()
         )
     }
 }

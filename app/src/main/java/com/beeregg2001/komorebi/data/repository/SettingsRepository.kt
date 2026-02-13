@@ -43,6 +43,7 @@ class SettingsRepository @Inject constructor(
     val konomiPort: Flow<String> = context.dataStore.data.map { it[KONOMI_PORT] ?: "7000" }
     val mirakurunIp: Flow<String> = context.dataStore.data.map { it[MIRAKURUN_IP] ?: "" }
     val mirakurunPort: Flow<String> = context.dataStore.data.map { it[MIRAKURUN_PORT] ?: "" }
+    val liveChannelKeyMode: Flow<String> = context.dataStore.data.map { it[LIVE_CHANNEL_KEY_MODE] ?: "channel" }
 
     val themePreset: Flow<String> = context.dataStore.data.map { it[THEME_PRESET] ?: "Dark" }
     val themeCustomAccent: Flow<String> = context.dataStore.data.map { it[THEME_CUSTOM_ACCENT] ?: "#7C4DFF" }

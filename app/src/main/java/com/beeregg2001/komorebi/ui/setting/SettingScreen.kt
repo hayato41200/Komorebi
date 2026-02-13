@@ -43,6 +43,7 @@ import androidx.tv.material3.MaterialTheme
 import androidx.tv.material3.Surface
 import androidx.tv.material3.Text
 import com.beeregg2001.komorebi.data.SettingsRepository
+import com.beeregg2001.komorebi.ui.live.ChannelKeyMode
 import com.beeregg2001.komorebi.ui.settings.OpenSourceLicensesScreen
 import com.beeregg2001.komorebi.viewmodel.SettingsViewModel
 

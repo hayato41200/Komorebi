@@ -29,6 +29,7 @@ import coil.request.ImageRequest
 import coil.size.Size
 import coil.transform.Transformation
 import com.beeregg2001.komorebi.common.UrlBuilder
+import com.beeregg2001.komorebi.data.model.RecordedChapter
 import kotlinx.coroutines.delay
 
 /**
@@ -64,6 +65,7 @@ fun SceneSearchOverlay(
     videoId: Int,
     durationMs: Long,
     currentPositionMs: Long,
+    chapters: List<RecordedChapter>,
     konomiIp: String,
     konomiPort: String,
     onSeekRequested: (Long) -> Unit,
@@ -120,6 +122,33 @@ fun SceneSearchOverlay(
                 fontWeight = FontWeight.Bold,
                 modifier = Modifier.padding(bottom = 16.dp) // サムネイルとの間隔を確保
             )
+
+            if (chapters.isNotEmpty()) {
+                LazyRow(
+                    contentPadding = PaddingValues(horizontal = 48.dp),
+                    horizontalArrangement = Arrangement.spacedBy(10.dp),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(bottom = 10.dp)
+                ) {
+                    itemsIndexed(chapters) { _, chapter ->
+                        Surface(
+                            onClick = { onSeekRequested(chapter.positionSeconds * 1000) },
+                            colors = ClickableSurfaceDefaults.colors(
+                                containerColor = Color.White.copy(0.1f),
+                                focusedContainerColor = Color.White,
+                                focusedContentColor = Color.Black
+                            )
+                        ) {
+                            Text(
+                                text = chapter.title,
+                                modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp),
+                                style = MaterialTheme.typography.labelMedium
+                            )
+                        }
+                    }
+                }
+            }
 
             LazyRow(
                 state = listState,

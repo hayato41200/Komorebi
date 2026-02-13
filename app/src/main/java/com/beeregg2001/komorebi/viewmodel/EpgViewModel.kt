@@ -14,6 +14,8 @@ import com.beeregg2001.komorebi.data.SettingsRepository
 import com.beeregg2001.komorebi.data.model.EpgChannel
 import com.beeregg2001.komorebi.data.model.EpgChannelWrapper
 import com.beeregg2001.komorebi.data.repository.EpgRepository
+import com.beeregg2001.komorebi.data.repository.TaskActionResult
+import com.beeregg2001.komorebi.data.repository.TaskErrorType
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.*
 import kotlinx.coroutines.flow.*
@@ -155,6 +157,60 @@ class EpgViewModel @Inject constructor(
             _selectedBroadcastingType.value = type
         }
     }
+
+
+    fun observeProgramTask(programId: String): Flow<ReservationTaskUiState> {
+        return repository.observeProgramReservation(programId).map { entity ->
+            if (entity == null) ReservationTaskUiState() else ReservationTaskUiState(
+                isReserved = entity.isReserved,
+                isRecording = entity.isRecording,
+                isLoading = entity.status == "loading",
+                errorType = entity.errorType?.toTaskErrorType(),
+                errorDetail = entity.errorDetail
+            )
+        }
+    }
+
+    fun observeChannelRecordingTask(channelId: String): Flow<ReservationTaskUiState> {
+        return repository.observeChannelRecording(channelId).map { entity ->
+            if (entity == null) ReservationTaskUiState() else ReservationTaskUiState(
+                isReserved = entity.isReserved,
+                isRecording = entity.isRecording,
+                isLoading = entity.status == "loading",
+                errorType = entity.errorType?.toTaskErrorType(),
+                errorDetail = entity.errorDetail
+            )
+        }
+    }
+
+    suspend fun toggleProgramReservation(
+        programId: String,
+        channelId: String,
+        title: String,
+        startAt: String?,
+        endAt: String?
+    ): TaskActionResult {
+        return repository.toggleProgramReservation(programId, channelId, title, startAt, endAt)
+    }
+
+    suspend fun startChannelRecording(channelId: String, channelName: String): TaskActionResult {
+        return repository.startChannelRecording(channelId, channelName)
+    }
+}
+
+data class ReservationTaskUiState(
+    val isReserved: Boolean = false,
+    val isRecording: Boolean = false,
+    val isLoading: Boolean = false,
+    val errorType: TaskErrorType? = null,
+    val errorDetail: String? = null
+)
+
+private fun String.toTaskErrorType(): TaskErrorType = when (this) {
+    "tuner_shortage" -> TaskErrorType.TUNER_SHORTAGE
+    "duplicated" -> TaskErrorType.DUPLICATED
+    "network" -> TaskErrorType.NETWORK
+    else -> TaskErrorType.UNKNOWN
 }
 
 sealed class EpgUiState {
