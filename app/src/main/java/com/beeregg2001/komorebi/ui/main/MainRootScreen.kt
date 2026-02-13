@@ -88,6 +88,11 @@ fun MainRootScreen(
     val mirakurunPort by settingsViewModel.mirakurunPort.collectAsState(initial = "40772")
     val konomiIp by settingsViewModel.konomiIp.collectAsState(initial = "https://192-168-100-60.local.konomi.tv")
     val konomiPort by settingsViewModel.konomiPort.collectAsState(initial = "7000")
+    val isJikkyoEnabled by settingsViewModel.enableJikkyoOverlay.collectAsState()
+    val jikkyoDensity by settingsViewModel.jikkyoDensity.collectAsState()
+    val jikkyoOpacity by settingsViewModel.jikkyoOpacity.collectAsState()
+    val jikkyoPosition by settingsViewModel.jikkyoPosition.collectAsState()
+    val isJikkyoSupported by settingsViewModel.isJikkyoSupported.collectAsState()
 
     val context = LocalContext.current
 
@@ -173,7 +178,12 @@ fun MainRootScreen(
                         onBackPressed = {
                             selectedChannel = null
                             isReturningFromPlayer = true // ★戻る時はフラグを立てる
-                        }
+                        },
+                        isJikkyoEnabled = isJikkyoEnabled,
+                        jikkyoDensity = jikkyoDensity,
+                        jikkyoOpacity = jikkyoOpacity,
+                        jikkyoPosition = jikkyoPosition,
+                        isJikkyoSupported = isJikkyoSupported
                     )
                 } else if (selectedProgram != null) {
                     VideoPlayerScreen(
@@ -277,6 +287,7 @@ fun MainRootScreen(
 
         if (isSettingsOpen) {
             SettingsScreen(
+                settingsViewModel = settingsViewModel,
                 onBack = {
                     isSettingsOpen = false
                     isDataReady = false

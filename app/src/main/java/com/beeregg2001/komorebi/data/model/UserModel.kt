@@ -9,6 +9,14 @@ data class KonomiUser(
     val id: Int,
     val name: String,
     val pinned_channel_ids: List<String>,
+    val is_logged_in: Boolean? = null,
+    val niconico_user_name: String? = null,
+    val capabilities: KonomiUserCapabilities? = null,
+)
+
+data class KonomiUserCapabilities(
+    val jikkyo: Boolean? = null,
+    val external_account_linkage: Boolean? = null,
 )
 
 data class KonomiHistoryProgram(

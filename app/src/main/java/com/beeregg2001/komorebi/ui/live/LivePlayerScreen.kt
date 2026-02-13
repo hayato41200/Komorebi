@@ -83,9 +83,11 @@ fun LivePlayerScreen(
     onSubMenuToggle: (Boolean) -> Unit,
     onChannelSelect: (Channel) -> Unit,
     onBackPressed: () -> Unit,
-    recordingState: ReservationTaskUiState,
-    onStartRecordingClick: () -> Unit,
-    onRetryRecordingClick: () -> Unit,
+    isJikkyoEnabled: Boolean,
+    jikkyoDensity: Int,
+    jikkyoOpacity: Float,
+    jikkyoPosition: String,
+    isJikkyoSupported: Boolean,
 ) {
     val context = LocalContext.current
     val scrollState = rememberScrollState()
@@ -366,6 +368,17 @@ fun LivePlayerScreen(
         )
 
         AnimatedVisibility(visible = isPinnedOverlay && playerError == null, enter = fadeIn(), exit = fadeOut()) { StatusOverlay(currentChannelItem, mirakurunIp, mirakurunPort, konomiIp, konomiPort) }
+
+        AnimatedVisibility(visible = playerError == null, enter = fadeIn(), exit = fadeOut()) {
+            JikkyoOverlay(
+                enabled = isJikkyoEnabled,
+                capabilitySupported = isJikkyoSupported,
+                density = jikkyoDensity,
+                opacity = jikkyoOpacity,
+                position = jikkyoPosition,
+                programTitle = currentChannelItem.programPresent?.title ?: "番組情報なし"
+            )
+        }
 
         AnimatedVisibility(visible = showOverlay && playerError == null && !isMiniListOpen, enter = slideInVertically(initialOffsetY = { it }) + fadeIn(), exit = slideOutVertically(targetOffsetY = { it }) + fadeOut()) {
             LiveOverlayUI(

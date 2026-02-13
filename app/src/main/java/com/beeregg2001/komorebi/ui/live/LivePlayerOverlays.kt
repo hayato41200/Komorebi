@@ -333,35 +333,45 @@ fun LiveToast(message: String?) {
     }
 }
 
+
+enum class JikkyoOverlayPosition { Top, Center, Bottom }
+
 @Composable
-fun StreamReconnectingOverlay(visible: Boolean, message: String) {
-    AnimatedVisibility(
-        visible = visible,
-        enter = fadeIn(),
-        exit = fadeOut()
-    ) {
-        Box(
+fun JikkyoOverlay(
+    enabled: Boolean,
+    capabilitySupported: Boolean,
+    density: Int,
+    opacity: Float,
+    position: String,
+    programTitle: String,
+    modifier: Modifier = Modifier
+) {
+    if (!enabled || !capabilitySupported) return
+
+    val rows = when (density.coerceIn(1, 3)) {
+        1 -> 3
+        2 -> 6
+        else -> 9
+    }
+    val align = when (position) {
+        "Bottom" -> Alignment.BottomCenter
+        "Center" -> Alignment.Center
+        else -> Alignment.TopCenter
+    }
+    val sampleMessages = remember(programTitle) {
+        List(rows) { index -> "${index + 1}: ${programTitle.take(14)} の実況コメント" }
+    }
+
+    Box(modifier = modifier.fillMaxSize().padding(horizontal = 48.dp), contentAlignment = align) {
+        Column(
             modifier = Modifier
-                .fillMaxSize()
-                .background(Color.Black.copy(alpha = 0.55f)),
-            contentAlignment = Alignment.Center
+                .fillMaxWidth(0.8f)
+                .background(Color.Black.copy(alpha = opacity.coerceIn(0.2f, 1f)), RoundedCornerShape(10.dp))
+                .padding(12.dp),
+            verticalArrangement = Arrangement.spacedBy(4.dp)
         ) {
-            Row(
-                modifier = Modifier
-                    .background(Color.Black.copy(0.85f), RoundedCornerShape(14.dp))
-                    .border(1.dp, Color.White.copy(0.2f), RoundedCornerShape(14.dp))
-                    .padding(horizontal = 22.dp, vertical = 16.dp),
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                CircularProgressIndicator(
-                    color = Color.White,
-                    strokeWidth = 3.dp,
-                    modifier = Modifier.size(24.dp)
-                )
-                Spacer(modifier = Modifier.width(12.dp))
-                Icon(Icons.Default.Sync, contentDescription = null, tint = Color.White)
-                Spacer(modifier = Modifier.width(12.dp))
-                Text(text = message, color = Color.White, fontWeight = FontWeight.Bold)
+            sampleMessages.forEach {
+                Text(text = it, color = Color.White, style = MaterialTheme.typography.bodyMedium)
             }
         }
     }
