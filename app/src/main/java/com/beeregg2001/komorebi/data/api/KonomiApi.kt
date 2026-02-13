@@ -5,6 +5,7 @@ import com.beeregg2001.komorebi.data.model.KonomiHistoryProgram
 import com.beeregg2001.komorebi.data.model.KonomiProgram
 import com.beeregg2001.komorebi.data.model.KonomiUser
 import com.beeregg2001.komorebi.data.model.RecordedApiResponse
+import com.beeregg2001.komorebi.data.model.StartRecordingRequest
 import com.beeregg2001.komorebi.viewmodel.ChannelApiResponse
 import retrofit2.http.Body
 import retrofit2.http.DELETE
@@ -53,4 +54,14 @@ interface KonomiApi {
 
     @DELETE("api/programs/bookmarks/{program_id}")
     suspend fun removeBookmark(@Path("program_id") programId: String)
+
+    // --- 予約/録画 ---
+    @POST("api/recording/reservations/{program_id}")
+    suspend fun reserveProgram(@Path("program_id") programId: String)
+
+    @DELETE("api/recording/reservations/{program_id}")
+    suspend fun cancelProgramReservation(@Path("program_id") programId: String)
+
+    @POST("api/recording/recorders")
+    suspend fun startChannelRecording(@Body request: StartRecordingRequest)
 }

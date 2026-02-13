@@ -21,8 +21,10 @@ import androidx.compose.ui.zIndex
 import androidx.tv.material3.*
 import com.beeregg2001.komorebi.data.model.EpgProgram
 import com.beeregg2001.komorebi.viewmodel.EpgUiState
+import com.beeregg2001.komorebi.viewmodel.EpgViewModel
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.yield
+import kotlinx.coroutines.launch
 import java.time.OffsetDateTime
 
 @OptIn(ExperimentalComposeUiApi::class, ExperimentalTvMaterial3Api::class)
@@ -43,7 +45,8 @@ fun EpgNavigationContainer(
     currentType: String,
     onTypeChanged: (String) -> Unit,
     restoreChannelId: String? = null,
-    availableTypes: List<String> = emptyList()
+    availableTypes: List<String> = emptyList(),
+    epgViewModel: EpgViewModel
 ) {
     var jumpTargetTime by remember { mutableStateOf<OffsetDateTime?>(null) }
     var internalRestoreChannelId by remember { mutableStateOf(restoreChannelId) }
@@ -97,6 +100,8 @@ fun EpgNavigationContainer(
 
         if (selectedProgram != null) {
             val detailInitialFocusRequester = remember { FocusRequester() }
+            val reservationState by epgViewModel.observeProgramTask(selectedProgram.id).collectAsState(initial = com.beeregg2001.komorebi.viewmodel.ReservationTaskUiState())
+            val scope = rememberCoroutineScope()
 
             Box(
                 modifier = Modifier
@@ -106,10 +111,32 @@ fun EpgNavigationContainer(
             ) {
                 ProgramDetailScreen(
                     program = selectedProgram,
+                    reservationState = reservationState,
                     onPlayClick = { program ->
                         onNavigateToPlayer(program.channel_id, mirakurunIp, mirakurunPort)
                     },
-                    onRecordClick = { /* 予約 */ },
+                    onRecordClick = { program ->
+                        scope.launch {
+                            epgViewModel.toggleProgramReservation(
+                                programId = program.id,
+                                channelId = program.channel_id,
+                                title = program.title,
+                                startAt = program.start_time,
+                                endAt = program.end_time
+                            )
+                        }
+                    },
+                    onRetryRecordClick = { program ->
+                        scope.launch {
+                            epgViewModel.toggleProgramReservation(
+                                programId = program.id,
+                                channelId = program.channel_id,
+                                title = program.title,
+                                startAt = program.start_time,
+                                endAt = program.end_time
+                            )
+                        }
+                    },
                     onBackClick = {
                         // 詳細から戻った時は、元の番組セルにフォーカスを戻す
                         runCatching { contentRequester.requestFocus() }

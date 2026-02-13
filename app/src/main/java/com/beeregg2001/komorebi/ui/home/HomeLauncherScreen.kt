@@ -303,7 +303,8 @@ fun HomeLauncherScreen(
                                     onPlayerStateChanged = { },
                                     lastFocusedChannelId = internalLastPlayerChannelId,
                                     isReturningFromPlayer = isReturningFromPlayer && selectedTabIndex == 1,
-                                    onReturnFocusConsumed = onReturnFocusConsumed
+                                    onReturnFocusConsumed = onReturnFocusConsumed,
+                                    epgViewModel = epgViewModel
                                 )
                             }
                             2 -> {
@@ -324,7 +325,8 @@ fun HomeLauncherScreen(
                                         epgViewModel.updateBroadcastingType(newType)
                                     },
                                     restoreChannelId = if (isReturningFromPlayer && selectedTabIndex == 2) internalLastPlayerChannelId else null,
-                                    availableTypes = availableTypes
+                                    availableTypes = availableTypes,
+                                    epgViewModel = epgViewModel
                                 )
                             }
                             3 -> {
