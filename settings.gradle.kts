@@ -21,6 +21,9 @@ dependencyResolutionManagement {
 
 rootProject.name = "Komorebi"
 include(":app")
-// settings.gradle.kts (Kotlin DSL 形式)
-include(":media-decoder-ffmpeg")
-project(":media-decoder-ffmpeg").projectDir = File("/Users/taichimaekawa/Documents/ffmpeg/media/libraries/decoder_ffmpeg")
+
+val ffmpegDecoderDir = File(rootDir, "media/libraries/decoder_ffmpeg")
+if (ffmpegDecoderDir.exists()) {
+    include(":media-decoder-ffmpeg")
+    project(":media-decoder-ffmpeg").projectDir = ffmpegDecoderDir
+}
