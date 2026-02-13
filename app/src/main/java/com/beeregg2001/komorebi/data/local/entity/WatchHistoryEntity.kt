@@ -80,6 +80,7 @@ fun WatchHistoryEntity.toRecordedProgram(): RecordedProgram {
             containerFormat = "",
             videoCodec = "",
             audioCodec = ""
-        )
+        ),
+        chapters = emptyList()
     )
 }

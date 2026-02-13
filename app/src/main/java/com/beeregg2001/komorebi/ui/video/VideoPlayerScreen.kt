@@ -61,6 +61,8 @@ fun VideoPlayerScreen(
     var indicatorState by remember { mutableStateOf<IndicatorState?>(null) }
     var toastState by remember { mutableStateOf<Pair<String, Long>?>(null) }
     var isPlayerPlaying by remember { mutableStateOf(false) }
+    var chapterKeyBinding by remember { mutableStateOf(ChapterKeyBinding.DPAD_UP_DOWN) }
+    val sortedChapters = remember(program.chapters) { program.chapters.sortedBy { it.positionSeconds } }
 
     val audioProcessor = remember {
         ChannelMixingAudioProcessor().apply {
@@ -113,6 +115,31 @@ fun VideoPlayerScreen(
                 if (isSubMenuOpen || isSceneSearchOpen) return@onKeyEvent false
 
                 onShowControlsChange(true)
+                if (chapterKeyBinding == ChapterKeyBinding.DPAD_UP_DOWN && keyCode == NativeKeyEvent.KEYCODE_DPAD_UP) {
+                    seekToPreviousChapter(exoPlayer, sortedChapters)?.let { label ->
+                        indicatorState = IndicatorState(Icons.Default.SkipPrevious, label)
+                    }
+                    return@onKeyEvent true
+                }
+                if (chapterKeyBinding == ChapterKeyBinding.DPAD_UP_DOWN && keyCode == NativeKeyEvent.KEYCODE_DPAD_DOWN) {
+                    seekToNextChapter(exoPlayer, sortedChapters)?.let { label ->
+                        indicatorState = IndicatorState(Icons.Default.SkipNext, label)
+                    }
+                    return@onKeyEvent true
+                }
+                if (chapterKeyBinding == ChapterKeyBinding.COLOR_KEYS && keyCode in previousChapterColorKeys) {
+                    seekToPreviousChapter(exoPlayer, sortedChapters)?.let { label ->
+                        indicatorState = IndicatorState(Icons.Default.SkipPrevious, label)
+                    }
+                    return@onKeyEvent true
+                }
+                if (chapterKeyBinding == ChapterKeyBinding.COLOR_KEYS && keyCode in nextChapterColorKeys) {
+                    seekToNextChapter(exoPlayer, sortedChapters)?.let { label ->
+                        indicatorState = IndicatorState(Icons.Default.SkipNext, label)
+                    }
+                    return@onKeyEvent true
+                }
+
                 when (keyCode) {
                     NativeKeyEvent.KEYCODE_DPAD_CENTER, NativeKeyEvent.KEYCODE_ENTER -> {
                         if (exoPlayer.isPlaying) {
@@ -159,6 +186,7 @@ fun VideoPlayerScreen(
                 videoId = program.recordedVideo.id,
                 durationMs = exoPlayer.duration,
                 currentPositionMs = exoPlayer.currentPosition,
+                chapters = sortedChapters,
                 konomiIp = konomiIp, konomiPort = konomiPort,
                 onSeekRequested = { time ->
                     exoPlayer.seekTo(time)
@@ -176,6 +204,7 @@ fun VideoPlayerScreen(
         AnimatedVisibility(visible = isSubMenuOpen, enter = slideInVertically { -it } + fadeIn(), exit = slideOutVertically { -it } + fadeOut()) {
             VideoTopSubMenuUI(
                 currentAudioMode = currentAudioMode, currentSpeed = currentSpeed,
+                currentChapterKeyBinding = chapterKeyBinding,
                 focusRequester = subMenuFocusRequester,
                 onAudioToggle = {
                     currentAudioMode = if(currentAudioMode == AudioMode.MAIN) AudioMode.SUB else AudioMode.MAIN
@@ -194,6 +223,13 @@ fun VideoPlayerScreen(
                     currentSpeed = speeds[(speeds.indexOf(currentSpeed) + 1) % speeds.size]
                     exoPlayer.setPlaybackSpeed(currentSpeed)
                     toastState = "再生速度: ${currentSpeed}x" to System.currentTimeMillis()
+                },
+                onChapterKeyBindingToggle = {
+                    chapterKeyBinding = when (chapterKeyBinding) {
+                        ChapterKeyBinding.DPAD_UP_DOWN -> ChapterKeyBinding.COLOR_KEYS
+                        ChapterKeyBinding.COLOR_KEYS -> ChapterKeyBinding.DPAD_UP_DOWN
+                    }
+                    toastState = "チャプター操作: ${chapterKeyBinding.label}" to System.currentTimeMillis()
                 }
             )
         }
@@ -217,4 +253,23 @@ fun VideoPlayerScreen(
             exoPlayer.release()
         }
     }
+}
+
+private val previousChapterColorKeys = setOf(NativeKeyEvent.KEYCODE_PROG_RED, NativeKeyEvent.KEYCODE_F1)
+private val nextChapterColorKeys = setOf(NativeKeyEvent.KEYCODE_PROG_GREEN, NativeKeyEvent.KEYCODE_F2)
+
+private fun seekToPreviousChapter(exoPlayer: ExoPlayer, chapters: List<com.beeregg2001.komorebi.data.model.RecordedChapter>): String? {
+    if (chapters.isEmpty()) return null
+    val currentSec = exoPlayer.currentPosition / 1000
+    val target = chapters.lastOrNull { it.positionSeconds < currentSec - 2 } ?: chapters.firstOrNull() ?: return null
+    exoPlayer.seekTo(target.positionSeconds * 1000)
+    return target.title
+}
+
+private fun seekToNextChapter(exoPlayer: ExoPlayer, chapters: List<com.beeregg2001.komorebi.data.model.RecordedChapter>): String? {
+    if (chapters.isEmpty()) return null
+    val currentSec = exoPlayer.currentPosition / 1000
+    val target = chapters.firstOrNull { it.positionSeconds > currentSec + 2 } ?: return null
+    exoPlayer.seekTo(target.positionSeconds * 1000)
+    return target.title
 }

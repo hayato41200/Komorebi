@@ -25,6 +25,7 @@ class SettingsRepository @Inject constructor(
         val KONOMI_PORT = stringPreferencesKey("konomi_port")
         val MIRAKURUN_IP = stringPreferencesKey("mirakurun_ip")
         val MIRAKURUN_PORT = stringPreferencesKey("mirakurun_port")
+        val LIVE_CHANNEL_KEY_MODE = stringPreferencesKey("live_channel_key_mode")
     }
 
     // 値を取得するFlow
@@ -32,6 +33,7 @@ class SettingsRepository @Inject constructor(
     val konomiPort: Flow<String> = context.dataStore.data.map { it[KONOMI_PORT] ?: "7000" }
     val mirakurunIp: Flow<String> = context.dataStore.data.map { it[MIRAKURUN_IP] ?: "" }
     val mirakurunPort: Flow<String> = context.dataStore.data.map { it[MIRAKURUN_PORT] ?: "" }
+    val liveChannelKeyMode: Flow<String> = context.dataStore.data.map { it[LIVE_CHANNEL_KEY_MODE] ?: "channel" }
 
     // 設定が保存（初期化）されているかチェックするFlow
     val isInitialized: Flow<Boolean> = context.dataStore.data.map { prefs ->
