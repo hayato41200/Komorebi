@@ -12,8 +12,10 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Build
 import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.ClosedCaption
+import androidx.compose.material.icons.filled.Crop
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.Settings
+import androidx.compose.material.icons.filled.SwapHoriz
 import androidx.compose.runtime.*
 import androidx.compose.ui.*
 import androidx.compose.ui.draw.alpha
@@ -34,7 +36,7 @@ import kotlinx.coroutines.delay
 fun TopSubMenuUI(
     currentAudioMode: AudioMode,
     currentSource: StreamSource,
-    currentQuality: StreamQuality,
+    commandState: LivePlaybackCommandState,
     isMirakurunAvailable: Boolean,
     isSubtitleEnabled: Boolean,
     focusRequester: FocusRequester,
@@ -42,6 +44,8 @@ fun TopSubMenuUI(
     onSourceToggle: () -> Unit,
     onSubtitleToggle: () -> Unit,
     onQualitySelect: (StreamQuality) -> Unit,
+    onCropPresetToggle: () -> Unit,
+    onChannelKeyModeToggle: () -> Unit,
     onCloseMenu: () -> Unit
 ) {
     var isQualityMode by remember { mutableStateOf(false) }
@@ -119,7 +123,7 @@ fun TopSubMenuUI(
                 Spacer(Modifier.width(16.dp))
                 MenuTileItem(
                     title = AppStrings.MENU_QUALITY, icon = Icons.Default.Settings,
-                    subtitle = currentQuality.label,
+                    subtitle = commandState.quality.label,
                     onClick = {
                         isQualityMode = !isQualityMode
                     },
@@ -160,15 +164,15 @@ fun TopSubMenuUI(
                         StreamQuality.entries.forEachIndexed { index, quality ->
                             MenuTileItem(
                                 title = quality.label,
-                                icon = if (currentQuality == quality) Icons.Default.CheckCircle else Icons.Default.Settings,
-                                subtitle = if (currentQuality == quality) "選択中" else "",
+                                icon = if (commandState.quality == quality) Icons.Default.CheckCircle else Icons.Default.Settings,
+                                subtitle = if (commandState.quality == quality) "選択中" else "",
                                 onClick = {
                                     onQualitySelect(quality)
                                     isQualityMode = false // 選んだら自動で閉じる
                                     try { mainQualityButtonRequester.requestFocus() } catch (e: Exception) {}
                                 },
                                 modifier = Modifier
-                                    .then(if (currentQuality == quality) Modifier.focusRequester(qualityFocusRequester) else Modifier)
+                                    .then(if (commandState.quality == quality) Modifier.focusRequester(qualityFocusRequester) else Modifier)
                                     .focusProperties {
                                         up = mainQualityButtonRequester // 上キーで親要素に確実に戻る
                                         down = FocusRequester.Cancel
@@ -180,6 +184,31 @@ fun TopSubMenuUI(
                                 Spacer(Modifier.width(16.dp))
                             }
                         }
+                    }
+
+                    Spacer(Modifier.height(24.dp))
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .horizontalScroll(rememberScrollState())
+                            .padding(horizontal = 32.dp, vertical = 8.dp),
+                        horizontalArrangement = Arrangement.Center
+                    ) {
+                        MenuTileItem(
+                            title = "クロップ",
+                            icon = Icons.Default.Crop,
+                            subtitle = commandState.cropPreset.label.removePrefix("L字クロップ: "),
+                            onClick = onCropPresetToggle,
+                            width = 180.dp
+                        )
+                        Spacer(Modifier.width(16.dp))
+                        MenuTileItem(
+                            title = "左右キー",
+                            icon = Icons.Default.SwapHoriz,
+                            subtitle = commandState.channelKeyMode.label.removePrefix("左右キー: "),
+                            onClick = onChannelKeyModeToggle,
+                            width = 200.dp
+                        )
                     }
                 }
             }

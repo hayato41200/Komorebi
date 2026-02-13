@@ -23,6 +23,7 @@ import androidx.compose.ui.unit.dp
 import androidx.tv.material3.*
 import com.beeregg2001.komorebi.ui.components.InputDialog
 import com.beeregg2001.komorebi.data.SettingsRepository
+import com.beeregg2001.komorebi.ui.live.ChannelKeyMode
 import com.beeregg2001.komorebi.ui.settings.OpenSourceLicensesScreen
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
@@ -38,6 +39,7 @@ fun SettingsScreen(onBack: () -> Unit) {
     val konomiPort by repository.konomiPort.collectAsState(initial = "40772")
     val mirakurunIp by repository.mirakurunIp.collectAsState(initial = "192.168.100.60")
     val mirakurunPort by repository.mirakurunPort.collectAsState(initial = "40772")
+    val liveChannelKeyMode by repository.liveChannelKeyMode.collectAsState(initial = ChannelKeyMode.CHANNEL.value)
 
     var selectedCategoryIndex by remember { mutableIntStateOf(0) }
     var editingItem by remember { mutableStateOf<Pair<String, String>?>(null) }
@@ -58,6 +60,7 @@ fun SettingsScreen(onBack: () -> Unit) {
     val kPortFocusRequester = remember { FocusRequester() }
     val mIpFocusRequester = remember { FocusRequester() }
     val mPortFocusRequester = remember { FocusRequester() }
+    val liveChannelKeyModeRequester = remember { FocusRequester() }
 
     // ★追加: ライセンスボタンのFocusRequester
     val appInfoLicenseRequester = remember { FocusRequester() }
@@ -126,6 +129,7 @@ fun SettingsScreen(onBack: () -> Unit) {
                         onClick = {
                             // カテゴリをクリック（決定）した時は、そのカテゴリの最初の項目へフォーカス移動
                             if (index == 0) kIpFocusRequester.requestFocus()
+                            if (index == 1) liveChannelKeyModeRequester.requestFocus()
                             if (index == 2) appInfoLicenseRequester.requestFocus() // ★追加
                         },
                         modifier = if (index == 0) Modifier.focusRequester(sideBarFocusRequester) else Modifier
@@ -164,7 +168,17 @@ fun SettingsScreen(onBack: () -> Unit) {
                         mPortRequester = mPortFocusRequester,
                         onItemClicked = { requester -> restoreFocusRequester = requester }
                     )
-                    1 -> PlaceholderContent("表示設定は準備中です", Icons.Default.Tv)
+                    1 -> DisplaySettingsContent(
+                        liveChannelKeyMode = ChannelKeyMode.fromValue(liveChannelKeyMode),
+                        liveChannelKeyModeRequester = liveChannelKeyModeRequester,
+                        onItemClicked = { requester -> restoreFocusRequester = requester },
+                        onToggleLiveChannelKeyMode = {
+                            val nextMode = if (ChannelKeyMode.fromValue(liveChannelKeyMode) == ChannelKeyMode.CHANNEL) ChannelKeyMode.DISABLED else ChannelKeyMode.CHANNEL
+                            scope.launch {
+                                repository.saveString(SettingsRepository.LIVE_CHANNEL_KEY_MODE, nextMode.value)
+                            }
+                        }
+                    )
                     2 -> AppInfoContent(
                         onShowLicenses = { showLicenses = true },
                         licenseRequester = appInfoLicenseRequester,
@@ -261,6 +275,37 @@ fun ConnectionSettingsContent(
                 onClick = {
                     onItemClicked(mPortRequester)
                     onEditRequest("Mirakurun ポート番号", mPort)
+                }
+            )
+        }
+    }
+}
+
+@Composable
+fun DisplaySettingsContent(
+    liveChannelKeyMode: ChannelKeyMode,
+    liveChannelKeyModeRequester: FocusRequester,
+    onItemClicked: (FocusRequester) -> Unit,
+    onToggleLiveChannelKeyMode: () -> Unit
+) {
+    Column(verticalArrangement = Arrangement.spacedBy(24.dp)) {
+        Text(
+            text = "表示設定",
+            style = MaterialTheme.typography.headlineMedium,
+            color = Color.White,
+            fontWeight = FontWeight.Bold,
+            modifier = Modifier.padding(bottom = 16.dp)
+        )
+
+        SettingsSection(title = "ライブ再生") {
+            SettingItem(
+                title = "左右キー割り当て",
+                value = if (liveChannelKeyMode == ChannelKeyMode.CHANNEL) "選局" else "無効",
+                icon = Icons.Default.Tv,
+                modifier = Modifier.focusRequester(liveChannelKeyModeRequester),
+                onClick = {
+                    onItemClicked(liveChannelKeyModeRequester)
+                    onToggleLiveChannelKeyMode()
                 }
             )
         }
