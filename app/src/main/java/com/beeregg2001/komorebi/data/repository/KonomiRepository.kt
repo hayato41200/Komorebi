@@ -11,11 +11,16 @@ import com.beeregg2001.komorebi.data.local.entity.WatchHistoryEntity
 import com.beeregg2001.komorebi.data.model.HistoryUpdateRequest
 import com.beeregg2001.komorebi.data.model.KonomiHistoryProgram
 import com.beeregg2001.komorebi.data.model.KonomiProgram
+import com.beeregg2001.komorebi.data.model.RecordedApiResponse
 import com.beeregg2001.komorebi.data.model.KonomiUser
+import com.beeregg2001.komorebi.data.model.RecordedProgram
+import com.beeregg2001.komorebi.data.util.ChapterParser
 import com.beeregg2001.komorebi.viewmodel.Channel
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.withContext
 import javax.inject.Inject
 import javax.inject.Singleton
 
@@ -36,11 +41,16 @@ class KonomiRepository @Inject constructor(
 
     // --- チャンネル・録画 (API) ---
     suspend fun getChannels() = apiService.getChannels()
-    suspend fun getRecordedPrograms(page: Int = 1) = apiService.getRecordedPrograms(page = page)
+    suspend fun getRecordedPrograms(page: Int = 1): RecordedApiResponse {
+        val response = apiService.getRecordedPrograms(page = page)
+        return response.withParsedChapters()
+    }
 
     // ★追加: 録画番組検索
-    suspend fun searchRecordedPrograms(keyword: String, page: Int = 1) =
-        apiService.searchVideos(keyword = keyword, page = page)
+    suspend fun searchRecordedPrograms(keyword: String, page: Int = 1): RecordedApiResponse {
+        val response = apiService.searchVideos(keyword = keyword, page = page)
+        return response.withParsedChapters()
+    }
 
     // --- マイリスト (API) ---
     suspend fun getBookmarks(): Result<List<KonomiProgram>> = runCatching { apiService.getBookmarks() }
@@ -76,5 +86,22 @@ class KonomiRepository @Inject constructor(
             else -> channel.networkId.toString()
         }
         return "${networkIdPart}${channel.serviceId}"
+    }
+
+    private suspend fun RecordedApiResponse.withParsedChapters(): RecordedApiResponse = withContext(Dispatchers.IO) {
+        copy(
+            recordedPrograms = recordedPrograms.map { program ->
+                program.withParsedChapters()
+            }
+        )
+    }
+
+    private fun RecordedProgram.withParsedChapters(): RecordedProgram {
+        val durationSec = duration.toLong()
+        val chapters = ChapterParser.parseFromRecordedFilePath(
+            recordedFilePath = recordedVideo.filePath,
+            durationSeconds = durationSec
+        )
+        return copy(chapters = chapters)
     }
 }
