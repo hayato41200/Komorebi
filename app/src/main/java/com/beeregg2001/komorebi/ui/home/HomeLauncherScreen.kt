@@ -22,6 +22,7 @@ import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.dp
 import androidx.tv.material3.*
+import com.beeregg2001.komorebi.data.model.Capability
 import com.beeregg2001.komorebi.data.model.EpgProgram
 import com.beeregg2001.komorebi.data.model.RecordedProgram
 import com.beeregg2001.komorebi.ui.epg.EpgNavigationContainer
@@ -70,7 +71,8 @@ fun HomeLauncherScreen(
     onShowAllRecordings: () -> Unit = {},
     onCloseRecordList: () -> Unit = {},
     isReturningFromPlayer: Boolean = false,
-    onReturnFocusConsumed: () -> Unit = {}
+    onReturnFocusConsumed: () -> Unit = {},
+    capability: Capability = Capability()
 ) {
     val tabs = listOf("ホーム", "ライブ", "番組表", "ビデオ")
     var selectedTabIndex by rememberSaveable { mutableIntStateOf(initialTabIndex) }
@@ -287,27 +289,32 @@ fun HomeLauncherScreen(
                                 )
                             }
                             1 -> {
-                                LiveContent(
-                                    groupedChannels = groupedChannels,
-                                    selectedChannel = selectedChannel,
-                                    lastWatchedChannel = null,
-                                    onChannelClick = onChannelClick,
-                                    onFocusChannelChange = { channelId ->
-                                        internalLastPlayerChannelId = channelId
-                                    },
-                                    mirakurunIp = mirakurunIp,
-                                    mirakurunPort = mirakurunPort,
-                                    konomiIp = konomiIp, konomiPort = konomiPort,
-                                    topNavFocusRequester = tabFocusRequesters[1],
-                                    contentFirstItemRequester = contentFirstItemRequesters[1],
-                                    onPlayerStateChanged = { },
-                                    lastFocusedChannelId = internalLastPlayerChannelId,
-                                    isReturningFromPlayer = isReturningFromPlayer && selectedTabIndex == 1,
-                                    onReturnFocusConsumed = onReturnFocusConsumed
-                                )
+                                if (capability.supportsJikkyo) {
+                                    LiveContent(
+                                        groupedChannels = groupedChannels,
+                                        selectedChannel = selectedChannel,
+                                        lastWatchedChannel = null,
+                                        onChannelClick = onChannelClick,
+                                        onFocusChannelChange = { channelId ->
+                                            internalLastPlayerChannelId = channelId
+                                        },
+                                        mirakurunIp = mirakurunIp,
+                                        mirakurunPort = mirakurunPort,
+                                        konomiIp = konomiIp, konomiPort = konomiPort,
+                                        topNavFocusRequester = tabFocusRequesters[1],
+                                        contentFirstItemRequester = contentFirstItemRequesters[1],
+                                        onPlayerStateChanged = { },
+                                        lastFocusedChannelId = internalLastPlayerChannelId,
+                                        isReturningFromPlayer = isReturningFromPlayer && selectedTabIndex == 1,
+                                        onReturnFocusConsumed = onReturnFocusConsumed
+                                    )
+                                } else {
+                                    UnsupportedFeatureContent(message = "ライブ系は機能未対応です")
+                                }
                             }
                             2 -> {
-                                EpgNavigationContainer(
+                                if (capability.supportsReservation) {
+                                    EpgNavigationContainer(
                                     uiState = epgUiState,
                                     logoUrls = cachedLogoUrls,
                                     mirakurunIp = mirakurunIp,
@@ -324,8 +331,12 @@ fun HomeLauncherScreen(
                                         epgViewModel.updateBroadcastingType(newType)
                                     },
                                     restoreChannelId = if (isReturningFromPlayer && selectedTabIndex == 2) internalLastPlayerChannelId else null,
-                                    availableTypes = availableTypes
+                                    availableTypes = availableTypes,
+                                    supportsReservation = capability.supportsReservation
                                 )
+                                } else {
+                                    UnsupportedFeatureContent(message = "予約系は機能未対応です")
+                                }
                             }
                             3 -> {
                                 if (isRecordListOpen) {
@@ -368,5 +379,12 @@ fun HomeLauncherScreen(
                 }
             }
         }
+    }
+}
+
+@Composable
+private fun UnsupportedFeatureContent(message: String) {
+    Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+        Text(message, color = Color.Gray, style = MaterialTheme.typography.headlineSmall)
     }
 }

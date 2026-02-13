@@ -11,6 +11,7 @@ import com.beeregg2001.komorebi.data.model.KonomiHistoryProgram
 import com.beeregg2001.komorebi.data.model.RecordedProgram
 import com.beeregg2001.komorebi.data.repository.KonomiRepository
 import dagger.hilt.android.lifecycle.HiltViewModel
+import com.beeregg2001.komorebi.data.model.Capability
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
@@ -28,6 +29,8 @@ class HomeViewModel @Inject constructor(
     // 読み込み状態の管理
     private val _isLoading = MutableStateFlow(false)
     val isLoading: StateFlow<Boolean> = _isLoading.asStateFlow()
+
+    val capability: StateFlow<Capability> = repository.capability
     /**
      * 単一の真実のソース (Single Source of Truth)
      * ローカルDBを監視し、常に最新の履歴（API由来 + ローカル由来）をUIへ流します。
@@ -73,6 +76,7 @@ class HomeViewModel @Inject constructor(
     init {
         // 初回起動時にデータを同期
         refreshHomeData()
+        viewModelScope.launch { repository.refreshCapability() }
     }
 
     /**

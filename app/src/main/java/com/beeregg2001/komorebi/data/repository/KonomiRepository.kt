@@ -8,6 +8,7 @@ import com.beeregg2001.komorebi.data.local.dao.LastChannelDao
 import com.beeregg2001.komorebi.data.local.dao.WatchHistoryDao
 import com.beeregg2001.komorebi.data.local.entity.LastChannelEntity
 import com.beeregg2001.komorebi.data.local.entity.WatchHistoryEntity
+import com.beeregg2001.komorebi.data.model.Capability
 import com.beeregg2001.komorebi.data.model.HistoryUpdateRequest
 import com.beeregg2001.komorebi.data.model.KonomiHistoryProgram
 import com.beeregg2001.komorebi.data.model.KonomiProgram
@@ -16,6 +17,8 @@ import com.beeregg2001.komorebi.viewmodel.Channel
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import retrofit2.HttpException
+import java.io.IOException
 import javax.inject.Inject
 import javax.inject.Singleton
 
@@ -25,37 +28,79 @@ class KonomiRepository @Inject constructor(
     private val watchHistoryDao: WatchHistoryDao,
     private val lastChannelDao: LastChannelDao
 ) {
-    // --- ユーザー設定 (API) ---
+    companion object {
+        const val UNSUPPORTED_MESSAGE = "機能未対応"
+    }
+
+    data class ApiGroup(val category: String, val apis: List<String>)
+
+    val availableApis: List<ApiGroup> = listOf(
+        ApiGroup("ライブ系", listOf("GET /api/channels", "GET /api/jikkyo/channels (probe)")),
+        ApiGroup("録画系", listOf("GET /api/videos", "GET /api/videos/search", "GET/POST /api/programs/history", "GET/POST/DELETE /api/programs/bookmarks")),
+        ApiGroup("予約系", listOf("GET /api/recording/reservations (probe)")),
+        ApiGroup("ユーザー系", listOf("GET /api/users/me", "GET /api/settings/client (probe)")),
+    )
+
     private val _currentUser = MutableStateFlow<KonomiUser?>(null)
     val currentUser: StateFlow<KonomiUser?> = _currentUser.asStateFlow()
+
+    private val _capability = MutableStateFlow(Capability())
+    val capability: StateFlow<Capability> = _capability.asStateFlow()
+
+    suspend fun refreshCapability() {
+        val supportsReservation = checkCapability { apiService.getReservationsProbe() }
+        val supportsJikkyo = checkCapability { apiService.getJikkyoProbe() }
+        val supportsQualityProfiles = checkCapability { apiService.getClientSettingsProbe() }
+        _capability.value = Capability(
+            supportsReservation = supportsReservation,
+            supportsJikkyo = supportsJikkyo,
+            supportsQualityProfiles = supportsQualityProfiles,
+        )
+    }
+
+    private suspend fun checkCapability(call: suspend () -> retrofit2.Response<Unit>): Boolean {
+        return runCatching { call() }
+            .map { response -> response.isSuccessful }
+            .getOrElse { false }
+    }
+
+    private fun mapRepositoryError(throwable: Throwable): Throwable {
+        return when (throwable) {
+            is HttpException -> if (throwable.code() == 404) UnsupportedOperationException(UNSUPPORTED_MESSAGE, throwable) else throwable
+            is IOException -> throwable
+            is UnsupportedOperationException -> throwable
+            else -> throwable
+        }
+    }
+
+    private suspend fun <T> safeApiCall(block: suspend () -> T): Result<T> {
+        return runCatching { block() }.fold(
+            onSuccess = { Result.success(it) },
+            onFailure = { Result.failure(mapRepositoryError(it)) }
+        )
+    }
 
     suspend fun refreshUser() {
         runCatching { apiService.getCurrentUser() }
             .onSuccess { _currentUser.value = it }
     }
 
-    // --- チャンネル・録画 (API) ---
     suspend fun getChannels() = apiService.getChannels()
     suspend fun getRecordedPrograms(page: Int = 1) = apiService.getRecordedPrograms(page = page)
 
-    // ★追加: 録画番組検索
     suspend fun searchRecordedPrograms(keyword: String, page: Int = 1) =
         apiService.searchVideos(keyword = keyword, page = page)
 
-    // --- マイリスト (API) ---
-    suspend fun getBookmarks(): Result<List<KonomiProgram>> = runCatching { apiService.getBookmarks() }
+    suspend fun getBookmarks(): Result<List<KonomiProgram>> = safeApiCall { apiService.getBookmarks() }
 
-    // --- 視聴履歴 (API: 将来用) ---
-    suspend fun getWatchHistory(): Result<List<KonomiHistoryProgram>> = runCatching { apiService.getWatchHistory() }
+    suspend fun getWatchHistory(): Result<List<KonomiHistoryProgram>> = safeApiCall { apiService.getWatchHistory() }
 
-    // --- 視聴履歴 (Room: ローカルDB) ---
     fun getLocalWatchHistory() = watchHistoryDao.getAllHistory()
 
     suspend fun saveToLocalHistory(entity: WatchHistoryEntity) {
         watchHistoryDao.insertOrUpdate(entity)
     }
 
-    // --- 最近見たチャンネル (Room: ローカルDB) ---
     fun getLastChannels() = lastChannelDao.getLastChannels()
 
     @OptIn(UnstableApi::class)
@@ -64,9 +109,8 @@ class KonomiRepository @Inject constructor(
         Log.d("DEBUG", "Channel saved: ${entity.name}")
     }
 
-    // 視聴位置同期 (API)
     suspend fun syncPlaybackPosition(programId: String, position: Double) {
-        runCatching { apiService.updateWatchHistory(HistoryUpdateRequest(programId, position)) }
+        safeApiCall { apiService.updateWatchHistory(HistoryUpdateRequest(programId, position)) }
     }
 
     fun buildStreamId(channel: Channel): String {

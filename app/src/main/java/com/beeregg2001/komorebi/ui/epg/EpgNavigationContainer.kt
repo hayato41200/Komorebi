@@ -43,7 +43,8 @@ fun EpgNavigationContainer(
     currentType: String,
     onTypeChanged: (String) -> Unit,
     restoreChannelId: String? = null,
-    availableTypes: List<String> = emptyList()
+    availableTypes: List<String> = emptyList(),
+    supportsReservation: Boolean = false
 ) {
     var jumpTargetTime by remember { mutableStateOf<OffsetDateTime?>(null) }
     var internalRestoreChannelId by remember { mutableStateOf(restoreChannelId) }
@@ -110,6 +111,7 @@ fun EpgNavigationContainer(
                         onNavigateToPlayer(program.channel_id, mirakurunIp, mirakurunPort)
                     },
                     onRecordClick = { /* 予約 */ },
+                    supportsReservation = supportsReservation,
                     onBackClick = {
                         // 詳細から戻った時は、元の番組セルにフォーカスを戻す
                         runCatching { contentRequester.requestFocus() }

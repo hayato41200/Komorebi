@@ -42,7 +42,8 @@ fun TopSubMenuUI(
     onSourceToggle: () -> Unit,
     onSubtitleToggle: () -> Unit,
     onQualitySelect: (StreamQuality) -> Unit,
-    onCloseMenu: () -> Unit
+    onCloseMenu: () -> Unit,
+    supportsQualityProfiles: Boolean = true
 ) {
     var isQualityMode by remember { mutableStateOf(false) }
     val qualityFocusRequester = remember { FocusRequester() }
@@ -119,11 +120,11 @@ fun TopSubMenuUI(
                 Spacer(Modifier.width(16.dp))
                 MenuTileItem(
                     title = AppStrings.MENU_QUALITY, icon = Icons.Default.Settings,
-                    subtitle = currentQuality.label,
+                    subtitle = if (supportsQualityProfiles) currentQuality.label else "機能未対応",
                     onClick = {
                         isQualityMode = !isQualityMode
                     },
-                    enabled = currentSource == StreamSource.KONOMITV,
+                    enabled = currentSource == StreamSource.KONOMITV && supportsQualityProfiles,
                     modifier = Modifier
                         .focusRequester(mainQualityButtonRequester)
                         .focusProperties {
@@ -143,7 +144,7 @@ fun TopSubMenuUI(
             // ==========================================
             // 2階層目 (画質サブメニューの子要素)
             // ==========================================
-            AnimatedVisibility(visible = isQualityMode) {
+            AnimatedVisibility(visible = isQualityMode && supportsQualityProfiles) {
                 Column(horizontalAlignment = Alignment.CenterHorizontally) {
                     Spacer(Modifier.height(16.dp))
                     // 親子関係を視覚的に分かりやすくするための境界線

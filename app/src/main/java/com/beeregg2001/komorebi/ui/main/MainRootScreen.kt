@@ -79,6 +79,7 @@ fun MainRootScreen(
     val isRecLoading by recordViewModel.isRecordingLoading.collectAsState()
     val isChannelError by channelViewModel.connectionError.collectAsState()
     val isSettingsInitialized by settingsViewModel.isSettingsInitialized.collectAsState()
+    val capability by homeViewModel.capability.collectAsState()
 
     var isDataReady by remember { mutableStateOf(false) }
     var isSplashFinished by remember { mutableStateOf(false) }
@@ -173,7 +174,8 @@ fun MainRootScreen(
                         onBackPressed = {
                             selectedChannel = null
                             isReturningFromPlayer = true // ★戻る時はフラグを立てる
-                        }
+                        },
+                        supportsQualityProfiles = capability.supportsQualityProfiles
                     )
                 } else if (selectedProgram != null) {
                     VideoPlayerScreen(
@@ -255,7 +257,8 @@ fun MainRootScreen(
                         onShowAllRecordings = { isRecordListOpen = true },
                         onCloseRecordList = { isRecordListOpen = false },
                         isReturningFromPlayer = isReturningFromPlayer, // ★フラグを渡す
-                        onReturnFocusConsumed = { isReturningFromPlayer = false } // ★フラグをリセットするコールバック
+                        onReturnFocusConsumed = { isReturningFromPlayer = false }, // ★フラグをリセットするコールバック
+                        capability = capability
                     )
                 }
             }
@@ -285,7 +288,8 @@ fun MainRootScreen(
                     epgViewModel.preloadAllEpgData()
                     homeViewModel.refreshHomeData()
                     recordViewModel.fetchRecentRecordings()
-                }
+                },
+                capability = capability
             )
         }
 

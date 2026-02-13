@@ -23,13 +23,14 @@ import androidx.compose.ui.unit.dp
 import androidx.tv.material3.*
 import com.beeregg2001.komorebi.ui.components.InputDialog
 import com.beeregg2001.komorebi.data.SettingsRepository
+import com.beeregg2001.komorebi.data.model.Capability
 import com.beeregg2001.komorebi.ui.settings.OpenSourceLicensesScreen
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 
 @OptIn(ExperimentalTvMaterial3Api::class)
 @Composable
-fun SettingsScreen(onBack: () -> Unit) {
+fun SettingsScreen(onBack: () -> Unit, capability: Capability) {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
     val repository = remember { SettingsRepository(context) }
@@ -164,7 +165,7 @@ fun SettingsScreen(onBack: () -> Unit) {
                         mPortRequester = mPortFocusRequester,
                         onItemClicked = { requester -> restoreFocusRequester = requester }
                     )
-                    1 -> PlaceholderContent("表示設定は準備中です", Icons.Default.Tv)
+                    1 -> CapabilityContent(capability = capability)
                     2 -> AppInfoContent(
                         onShowLicenses = { showLicenses = true },
                         licenseRequester = appInfoLicenseRequester,
@@ -281,6 +282,24 @@ fun SettingsSection(title: String, content: @Composable ColumnScope.() -> Unit) 
     }
 }
 
+
+@Composable
+fun CapabilityContent(capability: Capability) {
+    val unsupported = buildList {
+        if (!capability.supportsReservation) add("予約系: 機能未対応")
+        if (!capability.supportsJikkyo) add("ライブ実況: 機能未対応")
+        if (!capability.supportsQualityProfiles) add("画質プロファイル: 機能未対応")
+    }
+
+    if (unsupported.isEmpty()) {
+        PlaceholderContent("このサーバーは全機能に対応しています", Icons.Default.Home)
+    } else {
+        Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+            Text("サーバー機能状態", color = Color.White, style = MaterialTheme.typography.headlineSmall)
+            unsupported.forEach { Text(it, color = Color.Gray, style = MaterialTheme.typography.titleMedium) }
+        }
+    }
+}
 @Composable
 fun PlaceholderContent(message: String, icon: ImageVector) {
     Box(

@@ -78,6 +78,7 @@ fun LivePlayerScreen(
     onSubMenuToggle: (Boolean) -> Unit,
     onChannelSelect: (Channel) -> Unit,
     onBackPressed: () -> Unit,
+    supportsQualityProfiles: Boolean = true,
 ) {
     val context = LocalContext.current
     val scrollState = rememberScrollState()
@@ -342,7 +343,8 @@ fun LivePlayerScreen(
                     }
                     onSubMenuToggle(false)
                 },
-                onCloseMenu = { onSubMenuToggle(false) }
+                onCloseMenu = { onSubMenuToggle(false) },
+                supportsQualityProfiles = supportsQualityProfiles
             )
         }
 

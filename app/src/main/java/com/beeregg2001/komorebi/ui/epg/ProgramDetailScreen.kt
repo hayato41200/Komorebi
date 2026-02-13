@@ -49,7 +49,8 @@ fun ProgramDetailScreen(
     onPlayClick: (EpgProgram) -> Unit,
     onRecordClick: (EpgProgram) -> Unit,
     onBackClick: () -> Unit,
-    initialFocusRequester: FocusRequester // 親から渡されるものに一本化
+    initialFocusRequester: FocusRequester, // 親から渡されるものに一本化
+    supportsReservation: Boolean = false
 ) {
     val now = OffsetDateTime.now()
     val startTime = OffsetDateTime.parse(program.start_time)
@@ -119,13 +120,13 @@ fun ProgramDetailScreen(
                     }
                 } else if (isFuture) {
                     Button(
-                        onClick = { onRecordClick(program) },
-                        enabled = false,
+                        onClick = { if (supportsReservation) onRecordClick(program) },
+                        enabled = supportsReservation,
                         modifier = Modifier
                             .fillMaxWidth()
                             .focusRequester(initialFocusRequester) // 予約ボタンがあるならここ
                     ) {
-                        Text("録画予約（実装中）", fontFamily = NotoSansJP, fontWeight = FontWeight.Bold)
+                        Text(if (supportsReservation) "録画予約" else "機能未対応", fontFamily = NotoSansJP, fontWeight = FontWeight.Bold)
                     }
                 }
 
