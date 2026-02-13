@@ -25,6 +25,7 @@ import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.SolidColor
+import androidx.compose.ui.input.key.onKeyEvent
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
@@ -45,14 +46,18 @@ fun RecordListScreen(
     onProgramClick: (RecordedProgram) -> Unit,
     onLoadMore: () -> Unit,
     isLoadingMore: Boolean,
-    onBack: () -> Unit
+    onBack: () -> Unit,
+    myListIds: Set<Int> = emptySet(),
+    onMyListToggle: (Int) -> Unit = {}
 ) {
     var searchQuery by remember { mutableStateOf("") }
     var isSearchBarVisible by remember { mutableStateOf(false) }
+    var showMyListOnly by remember { mutableStateOf(false) }
 
-    val filteredRecordings = remember(searchQuery, recentRecordings) {
-        if (searchQuery.isBlank()) recentRecordings
-        else recentRecordings.filter { it.title.contains(searchQuery, ignoreCase = true) }
+    val filteredRecordings = remember(searchQuery, recentRecordings, myListIds, showMyListOnly) {
+        recentRecordings
+            .filter { !showMyListOnly || myListIds.contains(it.id) }
+            .filter { searchQuery.isBlank() || it.title.contains(searchQuery, ignoreCase = true) }
     }
 
     val gridState = rememberTvLazyGridState()
@@ -72,6 +77,13 @@ fun RecordListScreen(
 
         Spacer(Modifier.height(24.dp))
 
+        Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+            Button(onClick = { showMyListOnly = false }, colors = ButtonDefaults.colors(containerColor = if (!showMyListOnly) Color.White else Color.White.copy(alpha = 0.2f), contentColor = if (!showMyListOnly) Color.Black else Color.White)) { Text("通常一覧") }
+            Button(onClick = { showMyListOnly = true }, colors = ButtonDefaults.colors(containerColor = if (showMyListOnly) Color.White else Color.White.copy(alpha = 0.2f), contentColor = if (showMyListOnly) Color.Black else Color.White)) { Text("マイリスト") }
+        }
+
+        Spacer(Modifier.height(16.dp))
+
         TvLazyVerticalGrid(
             state = gridState,
             columns = TvGridCells.Fixed(4),
@@ -88,6 +100,12 @@ fun RecordListScreen(
                     modifier = Modifier
                         .aspectRatio(16f / 9f)
                         .onFocusChanged { isFocused = it.isFocused } // ★追加
+                        .onKeyEvent { event ->
+                            if (event.type == androidx.compose.ui.input.key.KeyEventType.KeyDown && event.key == androidx.compose.ui.input.key.Key.Menu) {
+                                onMyListToggle(program.id)
+                                true
+                            } else false
+                        }
                         .then(if (isFocused) Modifier.border(2.dp, Color.White, RoundedCornerShape(8.dp)) else Modifier) // ★追加: 白枠
                 )
             }

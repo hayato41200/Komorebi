@@ -6,6 +6,7 @@ import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.focusable
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.interaction.collectIsFocusedAsState
@@ -47,7 +48,9 @@ fun ChannelListOverlay(
     mirakurunPort: String,
     konomiIp: String,
     konomiPort: String,
-    focusRequester: FocusRequester
+    focusRequester: FocusRequester,
+    pinnedChannelIds: List<String> = emptyList(),
+    onPinToggle: (String, Boolean) -> Unit = { _, _ -> }
 ) {
     val focusManager = LocalFocusManager.current
 
@@ -60,7 +63,10 @@ fun ChannelListOverlay(
     }?.key ?: tabs.first()
 
     var selectedTab by remember { mutableStateOf(initialTab) }
-    val currentChannels = groupedChannels[selectedTab] ?: emptyList()
+    val currentChannels = (groupedChannels[selectedTab] ?: emptyList()).sortedBy { channel ->
+        val pinnedIndex = pinnedChannelIds.indexOf(channel.id)
+        if (pinnedIndex >= 0) pinnedIndex else Int.MAX_VALUE
+    }
     val listState = rememberLazyListState()
 
     // タブ切り替え時にリストを先頭（または選択中チャンネル）に戻す
@@ -151,6 +157,8 @@ fun ChannelListOverlay(
                     konomiIp = konomiIp,
                     konomiPort = konomiPort,
                     onClick = { onChannelSelect(channel) },
+                    isPinned = pinnedChannelIds.contains(channel.id),
+                    onPinToggle = { shouldPin -> onPinToggle(channel.id, shouldPin) },
                     modifier = Modifier.focusRequester(itemRequester)
                 )
             }
@@ -167,6 +175,8 @@ fun ChannelCardItem(
     konomiIp: String,
     konomiPort: String,
     onClick: () -> Unit,
+    isPinned: Boolean = false,
+    onPinToggle: (Boolean) -> Unit = {},
     modifier: Modifier = Modifier
 ) {
     val interactionSource = remember { MutableInteractionSource() }
@@ -182,6 +192,7 @@ fun ChannelCardItem(
     // 背景色: フォーカス時は白、視聴中はグレー、通常は暗いグレー
     val backgroundColor by animateColorAsState(
         targetValue = if (isFocused) Color.White
+        else if (isPinned) Color(0xFF4E3B0D)
         else if (isSelected) Color(0xFF424242)
         else Color(0xFF222222),
         animationSpec = tween(200),
@@ -213,10 +224,19 @@ fun ChannelCardItem(
                 color = borderColor,
                 shape = RoundedCornerShape(12.dp)
             )
-            .clickable(
+            .onKeyEvent { event ->
+                if (event.type == KeyEventType.KeyDown && event.key == Key.Menu) {
+                    onPinToggle(!isPinned)
+                    true
+                } else {
+                    false
+                }
+            }
+            .combinedClickable(
                 interactionSource = interactionSource,
                 indication = null,
-                onClick = onClick
+                onClick = onClick,
+                onLongClick = { onPinToggle(!isPinned) }
             )
             .padding(10.dp)
     ) {
@@ -245,7 +265,7 @@ fun ChannelCardItem(
                 verticalArrangement = Arrangement.Center
             ) {
                 Text(
-                    text = channel.name,
+                    text = (if (isPinned) "★ " else "") + channel.name,
                     style = MaterialTheme.typography.labelMedium,
                     fontWeight = FontWeight.Bold,
                     color = contentColor,

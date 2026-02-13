@@ -7,6 +7,7 @@ import androidx.media3.common.util.Log
 import androidx.media3.common.util.UnstableApi
 import com.beeregg2001.komorebi.data.model.EpgChannelResponse
 import com.beeregg2001.komorebi.data.model.EpgChannelWrapper
+import com.beeregg2001.komorebi.data.model.EpgProgram
 import retrofit2.http.GET
 import retrofit2.http.Query
 import java.time.OffsetDateTime
@@ -69,4 +70,27 @@ class EpgRepository @Inject constructor(
             Result.failure(e)
         }
     }
+
+    @RequiresApi(Build.VERSION_CODES.O)
+    suspend fun fetchNowAndNextPrograms(channelId: String): Result<List<EpgProgram>> {
+        return try {
+            val now = OffsetDateTime.now()
+            val formatter = DateTimeFormatter.ISO_OFFSET_DATE_TIME
+            val response = apiService.getEpgPrograms(
+                startTime = now.minusHours(1).format(formatter),
+                endTime = now.plusHours(6).format(formatter),
+                pinnedChannelIds = channelId
+            )
+            val programs = response.channels.firstOrNull()?.programs.orEmpty()
+                .filter { program ->
+                    runCatching { OffsetDateTime.parse(program.end_time).isAfter(now) }.getOrDefault(false)
+                }
+                .sortedBy { it.start_time }
+                .take(2)
+            Result.success(programs)
+        } catch (e: Exception) {
+            Result.failure(e)
+        }
+    }
+
 }

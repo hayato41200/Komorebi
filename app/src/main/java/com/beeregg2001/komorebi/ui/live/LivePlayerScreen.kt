@@ -23,8 +23,10 @@ import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
+import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
+import com.beeregg2001.komorebi.viewmodel.LiveMiniEpgViewModel
 import androidx.media3.common.*
 import androidx.media3.common.audio.ChannelMixingAudioProcessor
 import androidx.media3.common.audio.ChannelMixingMatrix
@@ -78,6 +80,8 @@ fun LivePlayerScreen(
     onSubMenuToggle: (Boolean) -> Unit,
     onChannelSelect: (Channel) -> Unit,
     onBackPressed: () -> Unit,
+    pinnedChannelIds: List<String> = emptyList(),
+    onPinToggle: (String, Boolean) -> Unit = { _, _ -> },
 ) {
     val context = LocalContext.current
     val scrollState = rememberScrollState()
@@ -86,6 +90,9 @@ fun LivePlayerScreen(
     val currentChannelItem by remember(channel.id, groupedChannels) {
         derivedStateOf { groupedChannels.values.flatten().find { it.id == channel.id } ?: channel }
     }
+    val miniEpgViewModel: LiveMiniEpgViewModel = hiltViewModel()
+    val miniPrograms by miniEpgViewModel.programs.collectAsState()
+
 
     val nativeLib = remember { NativeLib() }
     var currentAudioMode by remember { mutableStateOf(AudioMode.MAIN) }
@@ -210,6 +217,7 @@ fun LivePlayerScreen(
     }
 
     LaunchedEffect(currentChannelItem.id) {
+        miniEpgViewModel.fetchNowAndNextPrograms(currentChannelItem.id)
         onManualOverlayChange(false)
         onPinnedOverlayChange(false)
         onShowOverlayChange(true)
@@ -306,7 +314,12 @@ fun LivePlayerScreen(
             }
         }
 
-        AnimatedVisibility(visible = isPinnedOverlay && playerError == null, enter = fadeIn(), exit = fadeOut()) { StatusOverlay(currentChannelItem, mirakurunIp, mirakurunPort, konomiIp, konomiPort) }
+        AnimatedVisibility(visible = isPinnedOverlay && playerError == null, enter = fadeIn(), exit = fadeOut()) {
+            Box {
+                StatusOverlay(currentChannelItem, mirakurunIp, mirakurunPort, konomiIp, konomiPort)
+                MiniEpgOverlay(programs = miniPrograms, modifier = Modifier.align(Alignment.BottomStart).padding(24.dp))
+            }
+        }
 
         AnimatedVisibility(visible = showOverlay && playerError == null && !isMiniListOpen, enter = slideInVertically(initialOffsetY = { it }) + fadeIn(), exit = slideOutVertically(targetOffsetY = { it }) + fadeOut()) {
             LiveOverlayUI(
@@ -321,7 +334,7 @@ fun LivePlayerScreen(
             )
         }
         AnimatedVisibility(visible = isMiniListOpen && playerError == null, enter = slideInVertically(initialOffsetY = { it }) + fadeIn(), exit = slideOutVertically(targetOffsetY = { it }) + fadeOut(), modifier = Modifier.align(Alignment.BottomCenter).fillMaxWidth()) {
-            ChannelListOverlay(groupedChannels = groupedChannels, currentChannelId = currentChannelItem.id, onChannelSelect = { onChannelSelect(it); onMiniListToggle(false); mainFocusRequester.requestFocus() }, mirakurunIp = mirakurunIp ?: "", mirakurunPort = mirakurunPort ?: "", konomiIp = konomiIp, konomiPort = konomiPort, focusRequester = listFocusRequester)
+            ChannelListOverlay(groupedChannels = groupedChannels, currentChannelId = currentChannelItem.id, onChannelSelect = { onChannelSelect(it); onMiniListToggle(false); mainFocusRequester.requestFocus() }, mirakurunIp = mirakurunIp ?: "", mirakurunPort = mirakurunPort ?: "", konomiIp = konomiIp, konomiPort = konomiPort, focusRequester = listFocusRequester, pinnedChannelIds = pinnedChannelIds, onPinToggle = onPinToggle)
         }
         AnimatedVisibility(visible = isSubMenuOpen && playerError == null, enter = slideInVertically(initialOffsetY = { -it }) + fadeIn(), exit = slideOutVertically(targetOffsetY = { -it }) + fadeOut()) {
             TopSubMenuUI(

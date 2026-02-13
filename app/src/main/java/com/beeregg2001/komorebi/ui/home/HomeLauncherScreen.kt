@@ -91,6 +91,8 @@ fun HomeLauncherScreen(
     val lastChannels by homeViewModel.lastWatchedChannelFlow.collectAsState()
     val recentRecordings by recordViewModel.recentRecordings.collectAsState()
     val isRecordingLoadingMore by recordViewModel.isLoadingMore.collectAsState()
+    val pinnedChannelIds by homeViewModel.pinnedChannelIds.collectAsState()
+    val myListIds by recordViewModel.myListIds.collectAsState()
 
     val watchHistoryPrograms = remember(watchHistory) { watchHistory.map { it.toRecordedProgram() } }
 
@@ -303,7 +305,11 @@ fun HomeLauncherScreen(
                                     onPlayerStateChanged = { },
                                     lastFocusedChannelId = internalLastPlayerChannelId,
                                     isReturningFromPlayer = isReturningFromPlayer && selectedTabIndex == 1,
-                                    onReturnFocusConsumed = onReturnFocusConsumed
+                                    onReturnFocusConsumed = onReturnFocusConsumed,
+                                    pinnedChannelIds = pinnedChannelIds,
+                                    onPinToggle = { channelId, shouldPin ->
+                                        if (shouldPin) homeViewModel.pinChannel(channelId) else homeViewModel.unpinChannel(channelId)
+                                    }
                                 )
                             }
                             2 -> {
@@ -336,7 +342,9 @@ fun HomeLauncherScreen(
                                         onProgramClick = onProgramSelected,
                                         onLoadMore = { recordViewModel.loadNextPage() },
                                         isLoadingMore = isRecordingLoadingMore,
-                                        onBack = onCloseRecordList
+                                        onBack = onCloseRecordList,
+                                        myListIds = myListIds,
+                                        onMyListToggle = { recordViewModel.toggleMyList(it) }
                                     )
                                 } else {
                                     VideoTabContent(
@@ -350,7 +358,9 @@ fun HomeLauncherScreen(
                                         onProgramClick = onProgramSelected,
                                         onLoadMore = { recordViewModel.loadNextPage() },
                                         isLoadingMore = isRecordingLoadingMore,
-                                        onShowAllRecordings = onShowAllRecordings
+                                        onShowAllRecordings = onShowAllRecordings,
+                                        myListIds = myListIds,
+                                        onMyListToggle = { recordViewModel.toggleMyList(it) }
                                     )
                                 }
                             }
