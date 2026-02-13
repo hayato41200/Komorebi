@@ -22,7 +22,7 @@ dependencyResolutionManagement {
 rootProject.name = "Komorebi"
 include(":app")
 
-val ffmpegDecoderDir = File(rootDir, "decoder_ffmpeg")
+val ffmpegDecoderDir = File(rootDir, "/Users/hayato/Documents/decoder_ffmpeg")
 if (ffmpegDecoderDir.exists()) {
     include(":media-decoder-ffmpeg")
     project(":media-decoder-ffmpeg").projectDir = ffmpegDecoderDir
