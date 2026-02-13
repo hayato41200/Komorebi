@@ -315,6 +315,50 @@ fun LiveToast(message: String?) {
     }
 }
 
+
+enum class JikkyoOverlayPosition { Top, Center, Bottom }
+
+@Composable
+fun JikkyoOverlay(
+    enabled: Boolean,
+    capabilitySupported: Boolean,
+    density: Int,
+    opacity: Float,
+    position: String,
+    programTitle: String,
+    modifier: Modifier = Modifier
+) {
+    if (!enabled || !capabilitySupported) return
+
+    val rows = when (density.coerceIn(1, 3)) {
+        1 -> 3
+        2 -> 6
+        else -> 9
+    }
+    val align = when (position) {
+        "Bottom" -> Alignment.BottomCenter
+        "Center" -> Alignment.Center
+        else -> Alignment.TopCenter
+    }
+    val sampleMessages = remember(programTitle) {
+        List(rows) { index -> "${index + 1}: ${programTitle.take(14)} の実況コメント" }
+    }
+
+    Box(modifier = modifier.fillMaxSize().padding(horizontal = 48.dp), contentAlignment = align) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth(0.8f)
+                .background(Color.Black.copy(alpha = opacity.coerceIn(0.2f, 1f)), RoundedCornerShape(10.dp))
+                .padding(12.dp),
+            verticalArrangement = Arrangement.spacedBy(4.dp)
+        ) {
+            sampleMessages.forEach {
+                Text(text = it, color = Color.White, style = MaterialTheme.typography.bodyMedium)
+            }
+        }
+    }
+}
+
 fun formatChannelType(type: String): String = when (type.uppercase()) {
     "GR" -> "地デジ"
     "BS" -> "BS"

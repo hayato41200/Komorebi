@@ -1,354 +1,221 @@
 package com.beeregg2001.komorebi.ui.setting
 
 import androidx.compose.foundation.background
-import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxHeight
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.CastConnected
-import androidx.compose.material.icons.filled.Dns
-import androidx.compose.material.icons.filled.Home
 import androidx.compose.material.icons.filled.Info
+import androidx.compose.material.icons.filled.Link
+import androidx.compose.material.icons.filled.Palette
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.filled.Tv
-import androidx.compose.runtime.*
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
-import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
-import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
-import androidx.tv.material3.*
-import com.beeregg2001.komorebi.ui.components.InputDialog
+import androidx.hilt.navigation.compose.hiltViewModel
+import androidx.tv.material3.Button
+import androidx.tv.material3.ExperimentalTvMaterial3Api
+import androidx.tv.material3.Icon
+import androidx.tv.material3.MaterialTheme
+import androidx.tv.material3.Surface
+import androidx.tv.material3.Text
 import com.beeregg2001.komorebi.data.SettingsRepository
 import com.beeregg2001.komorebi.ui.settings.OpenSourceLicensesScreen
-import kotlinx.coroutines.delay
-import kotlinx.coroutines.launch
+import com.beeregg2001.komorebi.viewmodel.SettingsViewModel
 
 @OptIn(ExperimentalTvMaterial3Api::class)
 @Composable
-fun SettingsScreen(onBack: () -> Unit) {
-    val context = LocalContext.current
-    val scope = rememberCoroutineScope()
-    val repository = remember { SettingsRepository(context) }
-
-    val konomiIp by repository.konomiIp.collectAsState(initial = "192.168.100.60")
-    val konomiPort by repository.konomiPort.collectAsState(initial = "40772")
-    val mirakurunIp by repository.mirakurunIp.collectAsState(initial = "192.168.100.60")
-    val mirakurunPort by repository.mirakurunPort.collectAsState(initial = "40772")
+fun SettingsScreen(
+    onBack: () -> Unit,
+    settingsViewModel: SettingsViewModel = hiltViewModel()
+) {
+    val konomiIp by settingsViewModel.konomiIp.collectAsState()
+    val konomiPort by settingsViewModel.konomiPort.collectAsState()
+    val mirakurunIp by settingsViewModel.mirakurunIp.collectAsState()
+    val mirakurunPort by settingsViewModel.mirakurunPort.collectAsState()
+    val themePreset by settingsViewModel.themePreset.collectAsState()
+    val themeCustomAccent by settingsViewModel.themeCustomAccent.collectAsState()
+    val jikkyoEnabled by settingsViewModel.enableJikkyoOverlay.collectAsState()
+    val jikkyoDensity by settingsViewModel.jikkyoDensity.collectAsState()
+    val jikkyoOpacity by settingsViewModel.jikkyoOpacity.collectAsState()
+    val jikkyoPosition by settingsViewModel.jikkyoPosition.collectAsState()
+    val externalLinkageEnabled by settingsViewModel.enableExternalLinkage.collectAsState()
+    val currentUser by settingsViewModel.currentUser.collectAsState()
+    val isJikkyoSupported by settingsViewModel.isJikkyoSupported.collectAsState()
+    val isLinkageSupported by settingsViewModel.isLinkageSupported.collectAsState()
 
     var selectedCategoryIndex by remember { mutableIntStateOf(0) }
     var editingItem by remember { mutableStateOf<Pair<String, String>?>(null) }
-
-    // ★追加: オープンソースライセンス画面の表示状態
     var showLicenses by remember { mutableStateOf(false) }
 
     val categories = listOf(
         Category("接続設定", Icons.Default.CastConnected),
+        Category("連携設定", Icons.Default.Link),
         Category("表示設定", Icons.Default.Tv),
+        Category("テーマ", Icons.Default.Palette),
         Category("アプリ情報", Icons.Default.Info)
     )
 
-    val sideBarFocusRequester = remember { FocusRequester() }
-
-    // 各項目のFocusRequester
-    val kIpFocusRequester = remember { FocusRequester() }
-    val kPortFocusRequester = remember { FocusRequester() }
-    val mIpFocusRequester = remember { FocusRequester() }
-    val mPortFocusRequester = remember { FocusRequester() }
-
-    // ★追加: ライセンスボタンのFocusRequester
-    val appInfoLicenseRequester = remember { FocusRequester() }
-
-    // 最後にフォーカスがあった項目を記憶する変数
-    var restoreFocusRequester by remember { mutableStateOf<FocusRequester?>(null) }
-
     if (showLicenses) {
-        // ライセンス画面を表示（※OpenSourceLicensesScreenは同一パッケージを想定）
         OpenSourceLicensesScreen(onBack = { showLicenses = false })
-    } else {
-        // ★修正: 初期化時、ダイアログから戻った時、ライセンス画面から戻った時のフォーカス制御を統合
-        LaunchedEffect(editingItem) {
-            if (editingItem == null) {
-                if (restoreFocusRequester != null) {
-                    // ダイアログやライセンス画面から戻ってきた場合
-                    delay(50)
-                    restoreFocusRequester?.requestFocus()
-                } else {
-                    // 初回起動時
-                    delay(50)
-                    sideBarFocusRequester.requestFocus()
-                }
-            }
-        }
+        return
+    }
 
-        Row(
-            modifier = Modifier
-                .fillMaxSize()
-                .background(Color(0xFF111111))
+    Row(modifier = Modifier.fillMaxSize().background(Color(0xFF111111))) {
+        Column(
+            modifier = Modifier.width(280.dp).fillMaxHeight().background(Color(0xFF0A0A0A)).padding(vertical = 48.dp, horizontal = 24.dp),
+            verticalArrangement = Arrangement.spacedBy(8.dp)
         ) {
-            // --- 左側：サイドバーメニュー ---
-            Column(
-                modifier = Modifier
-                    .width(280.dp)
-                    .fillMaxHeight()
-                    .background(Color(0xFF0A0A0A))
-                    .padding(vertical = 48.dp, horizontal = 24.dp),
-                verticalArrangement = Arrangement.spacedBy(8.dp)
-            ) {
-                Row(
-                    verticalAlignment = Alignment.CenterVertically,
-                    modifier = Modifier.padding(bottom = 32.dp, start = 8.dp)
-                ) {
-                    Icon(
-                        imageVector = Icons.Default.Settings,
-                        contentDescription = null,
-                        tint = Color.White,
-                        modifier = Modifier.size(32.dp)
-                    )
-                    Spacer(modifier = Modifier.width(16.dp))
-                    Text(
-                        text = "設定",
-                        style = MaterialTheme.typography.headlineSmall,
-                        color = Color.White,
-                        fontWeight = FontWeight.Bold
-                    )
-                }
-
-                categories.forEachIndexed { index, category ->
-                    CategoryItem(
-                        title = category.name,
-                        icon = category.icon,
-                        isSelected = selectedCategoryIndex == index,
-                        onFocused = { selectedCategoryIndex = index },
-                        onClick = {
-                            // カテゴリをクリック（決定）した時は、そのカテゴリの最初の項目へフォーカス移動
-                            if (index == 0) kIpFocusRequester.requestFocus()
-                            if (index == 2) appInfoLicenseRequester.requestFocus() // ★追加
-                        },
-                        modifier = if (index == 0) Modifier.focusRequester(sideBarFocusRequester) else Modifier
-                    )
-                }
-
-                Spacer(modifier = Modifier.weight(1f))
-
-                CategoryItem(
-                    title = "ホームに戻る",
-                    icon = Icons.Default.Home,
-                    isSelected = false,
-                    onFocused = { },
-                    onClick = onBack,
-                    modifier = Modifier
-                )
+            Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(bottom = 24.dp)) {
+                Icon(Icons.Default.Settings, null, tint = Color.White, modifier = Modifier.size(30.dp))
+                Spacer(Modifier.width(12.dp))
+                Text("設定", style = MaterialTheme.typography.headlineSmall, color = Color.White, fontWeight = FontWeight.Bold)
             }
-
-            // --- 右側：詳細コンテンツエリア ---
-            Box(
-                modifier = Modifier
-                    .weight(1f)
-                    .fillMaxHeight()
-                    .padding(vertical = 48.dp, horizontal = 64.dp)
-            ) {
-                when (selectedCategoryIndex) {
-                    0 -> ConnectionSettingsContent(
-                        kIp = konomiIp,
-                        kPort = konomiPort,
-                        mIp = mirakurunIp,
-                        mPort = mirakurunPort,
-                        onEditRequest = { title, currentVal -> editingItem = title to currentVal },
-                        kIpRequester = kIpFocusRequester,
-                        kPortRequester = kPortFocusRequester,
-                        mIpRequester = mIpFocusRequester,
-                        mPortRequester = mPortFocusRequester,
-                        onItemClicked = { requester -> restoreFocusRequester = requester }
-                    )
-                    1 -> PlaceholderContent("表示設定は準備中です", Icons.Default.Tv)
-                    2 -> AppInfoContent(
-                        onShowLicenses = { showLicenses = true },
-                        licenseRequester = appInfoLicenseRequester,
-                        onItemClicked = { requester -> restoreFocusRequester = requester }
-                    )
-                }
+            categories.forEachIndexed { i, c ->
+                CategoryItem(title = c.name, icon = c.icon, isSelected = selectedCategoryIndex == i, onFocused = { selectedCategoryIndex = i }, onClick = { selectedCategoryIndex = i })
             }
+            Spacer(Modifier.weight(1f))
+            Button(onClick = onBack) { Text("戻る") }
         }
 
-        editingItem?.let { (title, value) ->
-            InputDialog(
-                title = title,
-                initialValue = value,
-                onDismiss = { editingItem = null },
-                onConfirm = { newValue ->
-                    scope.launch {
-                        val key = when (title) {
-                            "KonomiTV アドレス" -> SettingsRepository.KONOMI_IP
-                            "KonomiTV ポート番号" -> SettingsRepository.KONOMI_PORT
-                            "Mirakurun IPアドレス" -> SettingsRepository.MIRAKURUN_IP
-                            "Mirakurun ポート番号" -> SettingsRepository.MIRAKURUN_PORT
-                            else -> null
-                        }
-
-                        if (key != null) {
-                            repository.saveString(key, newValue)
-                        }
+        Column(modifier = Modifier.weight(1f).fillMaxHeight().padding(40.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+            when (selectedCategoryIndex) {
+                0 -> {
+                    SettingsTitle("接続設定")
+                    EditableSetting("KonomiTV アドレス", konomiIp) { editingItem = "KonomiTV アドレス" to konomiIp }
+                    EditableSetting("KonomiTV ポート番号", konomiPort) { editingItem = "KonomiTV ポート番号" to konomiPort }
+                    EditableSetting("Mirakurun IPアドレス", mirakurunIp) { editingItem = "Mirakurun IPアドレス" to mirakurunIp }
+                    EditableSetting("Mirakurun ポート番号", mirakurunPort) { editingItem = "Mirakurun ポート番号" to mirakurunPort }
+                }
+                1 -> {
+                    SettingsTitle("連携設定")
+                    Text("ログイン状態: ${if (currentUser?.is_logged_in == true) "ログイン済み" else "未ログイン"}", color = Color.White)
+                    Text("ユーザー: ${currentUser?.niconico_user_name ?: currentUser?.name ?: "-"}", color = Color.White.copy(alpha = 0.8f))
+                    ToggleSetting("外部連携を有効化", externalLinkageEnabled && isLinkageSupported, enabled = isLinkageSupported) {
+                        settingsViewModel.setExternalLinkageEnabled(it)
                     }
-                    editingItem = null
+                    if (!isLinkageSupported) Text("※ サーバー capability で連携が未対応のため無効です", color = Color.Gray)
                 }
-            )
+                2 -> {
+                    SettingsTitle("表示設定")
+                    ToggleSetting("実況オーバーレイ", jikkyoEnabled && isJikkyoSupported, enabled = isJikkyoSupported) {
+                        settingsViewModel.setJikkyoEnabled(it)
+                    }
+                    ChoiceSetting("表示密度", listOf("低", "中", "高"), (jikkyoDensity - 1).coerceIn(0, 2), enabled = isJikkyoSupported) {
+                        settingsViewModel.setJikkyoDensity(it + 1)
+                    }
+                    ChoiceSetting("透過率", listOf("30%", "50%", "65%", "80%", "100%"), when {
+                        jikkyoOpacity < 0.4f -> 0
+                        jikkyoOpacity < 0.57f -> 1
+                        jikkyoOpacity < 0.73f -> 2
+                        jikkyoOpacity < 0.9f -> 3
+                        else -> 4
+                    }, enabled = isJikkyoSupported) {
+                        val v = listOf(0.3f, 0.5f, 0.65f, 0.8f, 1f)[it]
+                        settingsViewModel.setJikkyoOpacity(v)
+                    }
+                    ChoiceSetting("表示位置", listOf("Top", "Center", "Bottom"), listOf("Top", "Center", "Bottom").indexOf(jikkyoPosition).coerceAtLeast(0), enabled = isJikkyoSupported) {
+                        settingsViewModel.setJikkyoPosition(listOf("Top", "Center", "Bottom")[it])
+                    }
+                    if (!isJikkyoSupported) Text("※ サーバー capability で実況未対応のため無効です", color = Color.Gray)
+                }
+                3 -> {
+                    SettingsTitle("テーマ")
+                    ChoiceSetting("プリセット", listOf("Dark", "Light", "HighContrast", "Custom"), listOf("Dark", "Light", "HighContrast", "Custom").indexOf(themePreset).coerceAtLeast(0)) {
+                        settingsViewModel.setThemePreset(listOf("Dark", "Light", "HighContrast", "Custom")[it])
+                    }
+                    if (themePreset == "Custom") {
+                        EditableSetting("カスタムアクセント", themeCustomAccent) { editingItem = "テーマ カラー" to themeCustomAccent }
+                    }
+                }
+                4 -> {
+                    SettingsTitle("アプリ情報")
+                    Text("Komorebi", style = MaterialTheme.typography.headlineMedium, color = Color.White)
+                    Button(onClick = { showLicenses = true }) { Text("オープンソースライセンス") }
+                }
+            }
         }
+    }
+
+    editingItem?.let { (title, value) ->
+        com.beeregg2001.komorebi.ui.components.InputDialog(
+            title = title,
+            initialValue = value,
+            onDismiss = { editingItem = null },
+            onConfirm = { newValue ->
+                when (title) {
+                    "KonomiTV アドレス" -> settingsViewModel.saveString(SettingsRepository.KONOMI_IP, newValue)
+                    "KonomiTV ポート番号" -> settingsViewModel.saveString(SettingsRepository.KONOMI_PORT, newValue)
+                    "Mirakurun IPアドレス" -> settingsViewModel.saveString(SettingsRepository.MIRAKURUN_IP, newValue)
+                    "Mirakurun ポート番号" -> settingsViewModel.saveString(SettingsRepository.MIRAKURUN_PORT, newValue)
+                    "テーマ カラー" -> settingsViewModel.setThemeAccent(newValue)
+                }
+                editingItem = null
+            }
+        )
     }
 }
 
 data class Category(val name: String, val icon: ImageVector)
 
-@Composable
-fun ConnectionSettingsContent(
-    kIp: String, kPort: String, mIp: String, mPort: String,
-    onEditRequest: (String, String) -> Unit,
-    kIpRequester: FocusRequester,
-    kPortRequester: FocusRequester,
-    mIpRequester: FocusRequester,
-    mPortRequester: FocusRequester,
-    onItemClicked: (FocusRequester) -> Unit
-) {
-    Column(verticalArrangement = Arrangement.spacedBy(24.dp)) {
-        Text(
-            text = "接続設定",
-            style = MaterialTheme.typography.headlineMedium,
-            color = Color.White,
-            fontWeight = FontWeight.Bold,
-            modifier = Modifier.padding(bottom = 16.dp)
-        )
+@Composable private fun SettingsTitle(title: String) {
+    Text(title, style = MaterialTheme.typography.headlineMedium, color = Color.White, fontWeight = FontWeight.Bold)
+}
 
-        SettingsSection(title = "KonomiTV") {
-            SettingItem(
-                title = "アドレス",
-                value = kIp,
-                icon = Icons.Default.Dns,
-                modifier = Modifier.focusRequester(kIpRequester),
-                onClick = {
-                    onItemClicked(kIpRequester)
-                    onEditRequest("KonomiTV アドレス", kIp)
-                }
-            )
-            SettingItem(
-                title = "ポート番号",
-                value = kPort,
-                modifier = Modifier.focusRequester(kPortRequester),
-                onClick = {
-                    onItemClicked(kPortRequester)
-                    onEditRequest("KonomiTV ポート番号", kPort)
-                }
-            )
-        }
-
-        SettingsSection(title = "Mirakurun(オプション)") {
-            SettingItem(
-                title = "アドレス",
-                value = mIp,
-                icon = Icons.Default.Dns,
-                modifier = Modifier.focusRequester(mIpRequester),
-                onClick = {
-                    onItemClicked(mIpRequester)
-                    onEditRequest("Mirakurun IPアドレス", mIp)
-                }
-            )
-            SettingItem(
-                title = "ポート番号",
-                value = mPort,
-                modifier = Modifier.focusRequester(mPortRequester),
-                onClick = {
-                    onItemClicked(mPortRequester)
-                    onEditRequest("Mirakurun ポート番号", mPort)
-                }
-            )
+@OptIn(ExperimentalTvMaterial3Api::class)
+@Composable private fun EditableSetting(title: String, value: String, onClick: () -> Unit) {
+    Surface(onClick = onClick, modifier = Modifier.fillMaxWidth()) {
+        Row(Modifier.fillMaxWidth().padding(16.dp), horizontalArrangement = Arrangement.SpaceBetween) {
+            Text(title)
+            Text(value)
         }
     }
 }
 
-@Composable
-fun SettingsSection(title: String, content: @Composable ColumnScope.() -> Unit) {
+@OptIn(ExperimentalTvMaterial3Api::class)
+@Composable private fun ToggleSetting(title: String, checked: Boolean, enabled: Boolean = true, onToggle: (Boolean) -> Unit) {
+    Surface(onClick = { if (enabled) onToggle(!checked) }, enabled = enabled, modifier = Modifier.fillMaxWidth()) {
+        Row(Modifier.fillMaxWidth().padding(16.dp), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
+            Text(title)
+            Text(if (checked) "ON" else "OFF")
+        }
+    }
+}
+
+@Composable private fun ChoiceSetting(title: String, options: List<String>, selectedIndex: Int, enabled: Boolean = true, onSelect: (Int) -> Unit) {
     Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-        Text(
-            text = title,
-            color = Color.White.copy(alpha = 0.7f),
-            style = MaterialTheme.typography.titleMedium,
-            fontWeight = FontWeight.SemiBold,
-            modifier = Modifier.padding(start = 8.dp, bottom = 4.dp)
-        )
-        content()
-    }
-}
-
-@Composable
-fun PlaceholderContent(message: String, icon: ImageVector) {
-    Box(
-        modifier = Modifier.fillMaxSize(),
-        contentAlignment = Alignment.Center
-    ) {
-        Column(horizontalAlignment = Alignment.CenterHorizontally) {
-            Icon(
-                imageVector = icon,
-                contentDescription = null,
-                tint = Color.White.copy(alpha = 0.2f),
-                modifier = Modifier.size(120.dp)
-            )
-            Spacer(modifier = Modifier.height(24.dp))
-            Text(
-                text = message,
-                color = Color.Gray,
-                style = MaterialTheme.typography.headlineSmall
-            )
-        }
-    }
-}
-
-// ★修正: アプリ情報コンテンツにライセンスへの導線を追加
-@Composable
-fun AppInfoContent(
-    onShowLicenses: () -> Unit,
-    licenseRequester: FocusRequester,
-    onItemClicked: (FocusRequester) -> Unit
-) {
-    Column(
-        modifier = Modifier.fillMaxSize(),
-        verticalArrangement = Arrangement.Center,
-        horizontalAlignment = Alignment.CenterHorizontally
-    ) {
-        Text(
-            text = "Komorebi",
-            style = MaterialTheme.typography.displayMedium,
-            color = Color.White,
-            fontWeight = FontWeight.Bold
-        )
-        Spacer(modifier = Modifier.height(16.dp))
-        Text(
-            text = "Version 0.1.0 beta-2",
-            style = MaterialTheme.typography.titleMedium,
-            color = Color.Gray
-        )
-        Spacer(modifier = Modifier.height(48.dp))
-
-        // デザインを統一したライセンス画面へのボタン
-        SettingItem(
-            title = "オープンソースライセンス",
-            value = "",
-            modifier = Modifier
-                .width(400.dp)
-                .focusRequester(licenseRequester),
-            onClick = {
-                onItemClicked(licenseRequester)
-                onShowLicenses()
+        Text(title, color = Color.White.copy(alpha = 0.8f))
+        Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+            options.forEachIndexed { i, text ->
+                val selected = i == selectedIndex
+                Surface(onClick = { if (enabled) onSelect(i) }, enabled = enabled) {
+                    Text(text, modifier = Modifier.padding(horizontal = 14.dp, vertical = 8.dp), color = if (selected) Color.Black else Color.White)
+                }
             }
-        )
-
-        Spacer(modifier = Modifier.height(48.dp))
-        Text(
-            text = "© 2026 Komorebi Project",
-            style = MaterialTheme.typography.bodyMedium,
-            color = Color.White.copy(alpha = 0.5f)
-        )
+        }
     }
 }
 
@@ -362,112 +229,12 @@ fun CategoryItem(
     onClick: () -> Unit,
     modifier: Modifier = Modifier
 ) {
-    var isFocused by remember { mutableStateOf(false) }
-
-    Surface(
-        selected = isSelected,
-        onClick = onClick,
-        modifier = modifier
-            .fillMaxWidth()
-            .onFocusChanged {
-                isFocused = it.isFocused
-                if (it.isFocused) onFocused()
-            },
-        colors = SelectableSurfaceDefaults.colors(
-            containerColor = Color.Transparent,
-            selectedContainerColor = Color.White.copy(alpha = 0.1f),
-            focusedContainerColor = Color.White.copy(alpha = 0.2f),
-            contentColor = Color.Gray,
-            selectedContentColor = Color.White,
-            focusedContentColor = Color.White
-        ),
-        shape = SelectableSurfaceDefaults.shape(MaterialTheme.shapes.medium),
-        scale = SelectableSurfaceDefaults.scale(focusedScale = 1.05f)
-    ) {
-        Row(
-            modifier = Modifier.padding(horizontal = 20.dp, vertical = 14.dp),
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            Icon(
-                imageVector = icon,
-                contentDescription = null,
-                modifier = Modifier.size(20.dp),
-                tint = if (isSelected || isFocused) Color.White else Color.Gray
-            )
-            Spacer(modifier = Modifier.width(16.dp))
-            Text(
-                text = title,
-                style = MaterialTheme.typography.titleMedium,
-                fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal
-            )
-            Spacer(modifier = Modifier.weight(1f))
-            if (isSelected) {
-                Box(
-                    modifier = Modifier
-                        .width(4.dp)
-                        .height(20.dp)
-                        .background(Color.White, MaterialTheme.shapes.small)
-                )
-            }
+    Surface(selected = isSelected, onClick = onClick, modifier = modifier.fillMaxWidth(), tonalElevation = if (isSelected) 4.dp else 0.dp) {
+        Row(modifier = Modifier.padding(horizontal = 16.dp, vertical = 12.dp), verticalAlignment = Alignment.CenterVertically) {
+            Icon(icon, null)
+            Spacer(Modifier.width(12.dp))
+            Text(title)
         }
     }
-}
-
-@OptIn(ExperimentalTvMaterial3Api::class)
-@Composable
-fun SettingItem(
-    title: String,
-    value: String,
-    icon: ImageVector? = null,
-    modifier: Modifier = Modifier,
-    onClick: () -> Unit
-) {
-    var isFocused by remember { mutableStateOf(false) }
-
-    Surface(
-        onClick = onClick,
-        modifier = modifier
-            .fillMaxWidth()
-            .onFocusChanged { isFocused = it.isFocused },
-        colors = ClickableSurfaceDefaults.colors(
-            containerColor = Color.White.copy(alpha = 0.05f),
-            focusedContainerColor = Color.White.copy(alpha = 0.9f),
-            contentColor = Color.White,
-            focusedContentColor = Color.Black
-        ),
-        shape = ClickableSurfaceDefaults.shape(MaterialTheme.shapes.medium),
-        scale = ClickableSurfaceDefaults.scale(focusedScale = 1.02f)
-    ) {
-        Row(
-            modifier = Modifier
-                .padding(horizontal = 24.dp, vertical = 18.dp),
-            horizontalArrangement = Arrangement.SpaceBetween,
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                if (icon != null) {
-                    Icon(
-                        imageVector = icon,
-                        contentDescription = null,
-                        modifier = Modifier.size(24.dp),
-                        tint = if (isFocused) Color.Black.copy(0.7f) else Color.White.copy(0.7f)
-                    )
-                    Spacer(modifier = Modifier.width(16.dp))
-                }
-                Text(
-                    text = title,
-                    style = MaterialTheme.typography.bodyLarge,
-                    fontWeight = FontWeight.Medium
-                )
-            }
-
-            // valueが空文字でもレイアウトが崩れないため、ライセンスボタンでも違和感なく表示されます
-            Text(
-                text = value,
-                style = MaterialTheme.typography.bodyLarge,
-                color = if (isFocused) Color.Black.copy(0.8f) else Color.White.copy(0.6f),
-                fontWeight = FontWeight.SemiBold
-            )
-        }
-    }
+    if (isSelected) onFocused()
 }
