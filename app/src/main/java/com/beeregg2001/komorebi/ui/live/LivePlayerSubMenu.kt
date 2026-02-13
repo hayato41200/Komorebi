@@ -14,6 +14,7 @@ import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.ClosedCaption
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.Settings
+import androidx.compose.material.icons.filled.FiberManualRecord
 import androidx.compose.runtime.*
 import androidx.compose.ui.*
 import androidx.compose.ui.draw.alpha
@@ -42,6 +43,9 @@ fun TopSubMenuUI(
     onSourceToggle: () -> Unit,
     onSubtitleToggle: () -> Unit,
     onQualitySelect: (StreamQuality) -> Unit,
+    onStartRecording: () -> Unit,
+    isRecording: Boolean,
+    isRecordingLoading: Boolean,
     onCloseMenu: () -> Unit
 ) {
     var isQualityMode by remember { mutableStateOf(false) }
@@ -136,6 +140,18 @@ fun TopSubMenuUI(
                     title = AppStrings.MENU_SUBTITLE, icon = Icons.Default.ClosedCaption,
                     subtitle = if(isSubtitleEnabled) "表示" else "非表示",
                     onClick = onSubtitleToggle,
+                    modifier = Modifier.focusProperties { down = FocusRequester.Cancel }
+                )
+                Spacer(Modifier.width(16.dp))
+                MenuTileItem(
+                    title = "このチャンネルを録画開始", icon = Icons.Default.FiberManualRecord,
+                    subtitle = when {
+                        isRecordingLoading -> "開始中..."
+                        isRecording -> "録画中"
+                        else -> "実行"
+                    },
+                    onClick = onStartRecording,
+                    enabled = !isRecordingLoading,
                     modifier = Modifier.focusProperties { down = FocusRequester.Cancel }
                 )
             }

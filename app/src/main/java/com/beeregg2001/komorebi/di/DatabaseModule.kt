@@ -5,6 +5,7 @@ import androidx.room.Room
 import com.beeregg2001.komorebi.data.local.AppDatabase
 import com.beeregg2001.komorebi.data.local.dao.LastChannelDao
 import com.beeregg2001.komorebi.data.local.dao.WatchHistoryDao
+import com.beeregg2001.komorebi.data.local.dao.ReservationDao
 import dagger.Module
 import dagger.Provides
 import dagger.hilt.InstallIn
@@ -35,4 +36,10 @@ object DatabaseModule {
     fun provideLastChannelDao(database: AppDatabase): LastChannelDao {
         return database.lastChannelDao()
     }
+
+    @Provides
+    fun provideReservationDao(database: AppDatabase): ReservationDao {
+        return database.reservationDao()
+    }
+
 }

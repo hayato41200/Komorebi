@@ -94,7 +94,8 @@ fun LiveOverlayUI(
     konomiIp: String,
     konomiPort: String,
     showDesc: Boolean,
-    scrollState: ScrollState
+    scrollState: ScrollState,
+    isRecording: Boolean
 ) {
     val program = channel.programPresent
     val sdf = remember { SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ssXXX", Locale.getDefault()) }
@@ -144,6 +145,21 @@ fun LiveOverlayUI(
                     style = MaterialTheme.typography.titleLarge,
                     color = Color.White.copy(0.8f)
                 )
+                if (isRecording) {
+                    Spacer(Modifier.width(12.dp))
+                    Box(
+                        modifier = Modifier
+                            .background(Color(0xFFD32F2F), RoundedCornerShape(999.dp))
+                            .padding(horizontal = 10.dp, vertical = 4.dp)
+                    ) {
+                        Text(
+                            text = "録画中",
+                            color = Color.White,
+                            style = MaterialTheme.typography.labelMedium,
+                            fontWeight = FontWeight.Bold
+                        )
+                    }
+                }
             }
             Text(
                 text = programTitle,

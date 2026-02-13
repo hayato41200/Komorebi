@@ -44,6 +44,8 @@ import com.beeregg2001.komorebi.NativeLib
 import com.beeregg2001.komorebi.common.AppStrings
 import com.beeregg2001.komorebi.common.UrlBuilder
 import com.beeregg2001.komorebi.viewmodel.Channel
+import com.beeregg2001.komorebi.viewmodel.ReservationTaskUiState
+import com.beeregg2001.komorebi.data.repository.TaskErrorType
 import com.beeregg2001.komorebi.util.TsReadExDataSourceFactory
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
@@ -78,6 +80,9 @@ fun LivePlayerScreen(
     onSubMenuToggle: (Boolean) -> Unit,
     onChannelSelect: (Channel) -> Unit,
     onBackPressed: () -> Unit,
+    recordingState: ReservationTaskUiState,
+    onStartRecordingClick: () -> Unit,
+    onRetryRecordingClick: () -> Unit,
 ) {
     val context = LocalContext.current
     val scrollState = rememberScrollState()
@@ -317,7 +322,8 @@ fun LivePlayerScreen(
                 konomiIp = konomiIp,
                 konomiPort = konomiPort,
                 showDesc = isManualOverlay,
-                scrollState = scrollState
+                scrollState = scrollState,
+                isRecording = recordingState.isRecording
             )
         }
         AnimatedVisibility(visible = isMiniListOpen && playerError == null, enter = slideInVertically(initialOffsetY = { it }) + fadeIn(), exit = slideOutVertically(targetOffsetY = { it }) + fadeOut(), modifier = Modifier.align(Alignment.BottomCenter).fillMaxWidth()) {
@@ -342,8 +348,25 @@ fun LivePlayerScreen(
                     }
                     onSubMenuToggle(false)
                 },
+                onStartRecording = onStartRecordingClick,
+                isRecording = recordingState.isRecording,
+                isRecordingLoading = recordingState.isLoading,
                 onCloseMenu = { onSubMenuToggle(false) }
             )
+        }
+
+        if (recordingState.errorType != null) {
+            Box(modifier = Modifier.fillMaxSize().padding(top = 90.dp), contentAlignment = Alignment.TopCenter) {
+                Surface(
+                    shape = androidx.compose.foundation.shape.RoundedCornerShape(10.dp),
+                    colors = androidx.tv.material3.SurfaceDefaults.colors(containerColor = Color.Black.copy(0.8f))
+                ) {
+                    Row(modifier = Modifier.padding(horizontal = 16.dp, vertical = 10.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                        Text(buildRecordingErrorMessage(recordingState.errorType, recordingState.errorDetail), color = Color(0xFFFFB3B3), style = MaterialTheme.typography.bodyMedium)
+                        Button(onClick = onRetryRecordingClick, enabled = !recordingState.isLoading) { Text("リトライ") }
+                    }
+                }
+            }
         }
 
         val isUiVisible = isSubMenuOpen || isMiniListOpen || showOverlay || isPinnedOverlay
@@ -355,4 +378,14 @@ fun LivePlayerScreen(
             LiveErrorDialog(errorMessage = playerError!!, onRetry = { playerError = null; retryKey++ }, onBack = onBackPressed)
         }
     }
+}
+
+private fun buildRecordingErrorMessage(type: TaskErrorType, detail: String?): String {
+    val base = when (type) {
+        TaskErrorType.TUNER_SHORTAGE -> "チューナー不足のため録画開始できません。"
+        TaskErrorType.DUPLICATED -> "重複タスクのため録画開始できません。"
+        TaskErrorType.NETWORK -> "オフライン中のため録画開始できません。"
+        TaskErrorType.UNKNOWN -> "録画開始に失敗しました。"
+    }
+    return if (detail.isNullOrBlank()) base else "$base $detail"
 }
