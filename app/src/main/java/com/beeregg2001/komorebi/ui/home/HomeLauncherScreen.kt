@@ -330,7 +330,8 @@ fun HomeLauncherScreen(
                                         epgViewModel.updateBroadcastingType(newType)
                                     },
                                     restoreChannelId = if (isReturningFromPlayer && selectedTabIndex == 2) internalLastPlayerChannelId else null,
-                                    availableTypes = availableTypes
+                                    availableTypes = availableTypes,
+                                    epgViewModel = epgViewModel
                                 )
                             }
                             3 -> {

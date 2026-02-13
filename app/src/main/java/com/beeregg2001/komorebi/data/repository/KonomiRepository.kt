@@ -11,11 +11,16 @@ import com.beeregg2001.komorebi.data.local.entity.WatchHistoryEntity
 import com.beeregg2001.komorebi.data.model.HistoryUpdateRequest
 import com.beeregg2001.komorebi.data.model.KonomiHistoryProgram
 import com.beeregg2001.komorebi.data.model.KonomiProgram
+import com.beeregg2001.komorebi.data.model.RecordedApiResponse
 import com.beeregg2001.komorebi.data.model.KonomiUser
+import com.beeregg2001.komorebi.data.model.RecordedProgram
+import com.beeregg2001.komorebi.data.util.ChapterParser
 import com.beeregg2001.komorebi.viewmodel.Channel
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.withContext
 import javax.inject.Inject
 import javax.inject.Singleton
 
@@ -25,37 +30,42 @@ class KonomiRepository @Inject constructor(
     private val watchHistoryDao: WatchHistoryDao,
     private val lastChannelDao: LastChannelDao
 ) {
-    // --- ユーザー設定 (API) ---
     private val _currentUser = MutableStateFlow<KonomiUser?>(null)
     val currentUser: StateFlow<KonomiUser?> = _currentUser.asStateFlow()
 
+    private val _isUserLoading = MutableStateFlow(false)
+    val isUserLoading: StateFlow<Boolean> = _isUserLoading.asStateFlow()
+
+    private val _userError = MutableStateFlow<String?>(null)
+    val userError: StateFlow<String?> = _userError.asStateFlow()
+
     suspend fun refreshUser() {
+        _isUserLoading.value = true
         runCatching { apiService.getCurrentUser() }
-            .onSuccess { _currentUser.value = it }
+            .onSuccess {
+                _currentUser.value = it
+                _userError.value = null
+            }
+            .onFailure {
+                _userError.value = it.message ?: "ユーザー情報の取得に失敗しました"
+            }
+        _isUserLoading.value = false
     }
 
-    // --- チャンネル・録画 (API) ---
     suspend fun getChannels() = apiService.getChannels()
     suspend fun getRecordedPrograms(page: Int = 1) = apiService.getRecordedPrograms(page = page)
-
-    // ★追加: 録画番組検索
     suspend fun searchRecordedPrograms(keyword: String, page: Int = 1) =
         apiService.searchVideos(keyword = keyword, page = page)
 
-    // --- マイリスト (API) ---
     suspend fun getBookmarks(): Result<List<KonomiProgram>> = runCatching { apiService.getBookmarks() }
-
-    // --- 視聴履歴 (API: 将来用) ---
     suspend fun getWatchHistory(): Result<List<KonomiHistoryProgram>> = runCatching { apiService.getWatchHistory() }
 
-    // --- 視聴履歴 (Room: ローカルDB) ---
     fun getLocalWatchHistory() = watchHistoryDao.getAllHistory()
 
     suspend fun saveToLocalHistory(entity: WatchHistoryEntity) {
         watchHistoryDao.insertOrUpdate(entity)
     }
 
-    // --- 最近見たチャンネル (Room: ローカルDB) ---
     fun getLastChannels() = lastChannelDao.getLastChannels()
 
     @OptIn(UnstableApi::class)
@@ -64,7 +74,6 @@ class KonomiRepository @Inject constructor(
         Log.d("DEBUG", "Channel saved: ${entity.name}")
     }
 
-    // 視聴位置同期 (API)
     suspend fun syncPlaybackPosition(programId: String, position: Double) {
         runCatching { apiService.updateWatchHistory(HistoryUpdateRequest(programId, position)) }
     }

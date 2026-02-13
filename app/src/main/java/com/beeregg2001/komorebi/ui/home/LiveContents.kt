@@ -31,6 +31,8 @@ import androidx.tv.material3.*
 import com.beeregg2001.komorebi.ui.components.ChannelLogo
 import com.beeregg2001.komorebi.ui.live.LivePlayerScreen
 import com.beeregg2001.komorebi.viewmodel.Channel
+import com.beeregg2001.komorebi.viewmodel.EpgViewModel
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.delay
 
 @RequiresApi(Build.VERSION_CODES.O)
@@ -145,6 +147,8 @@ fun LiveContent(
 
         if (selectedChannel != null) {
             var isMiniListOpen by remember { mutableStateOf(false) }
+            val scope = rememberCoroutineScope()
+            val recordingState by epgViewModel.observeChannelRecordingTask(selectedChannel.id).collectAsState(initial = com.beeregg2001.komorebi.viewmodel.ReservationTaskUiState())
             var showOverlay by remember { mutableStateOf(true) }
             var isManualOverlay by remember { mutableStateOf(false) }
             var isPinnedOverlay by remember { mutableStateOf(false) }

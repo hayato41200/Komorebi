@@ -5,7 +5,18 @@ import androidx.annotation.RequiresApi
 import androidx.compose.foundation.background
 import androidx.compose.foundation.focusGroup
 import androidx.compose.foundation.focusable
-import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxHeight
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.runtime.Composable
@@ -31,9 +42,15 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.media3.common.util.Log
 import androidx.media3.common.util.UnstableApi
-import androidx.tv.material3.*
+import androidx.tv.material3.Button
+import androidx.tv.material3.ExperimentalTvMaterial3Api
+import androidx.tv.material3.MaterialTheme
+import androidx.tv.material3.OutlinedButton
+import androidx.tv.material3.Text
 import com.beeregg2001.komorebi.data.model.EpgProgram
+import com.beeregg2001.komorebi.data.repository.TaskErrorType
 import com.beeregg2001.komorebi.ui.theme.NotoSansJP
+import com.beeregg2001.komorebi.viewmodel.ReservationTaskUiState
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.yield
@@ -46,10 +63,12 @@ import java.time.format.DateTimeFormatter
 @Composable
 fun ProgramDetailScreen(
     program: EpgProgram,
+    reservationState: ReservationTaskUiState,
     onPlayClick: (EpgProgram) -> Unit,
     onRecordClick: (EpgProgram) -> Unit,
+    onRetryRecordClick: (EpgProgram) -> Unit,
     onBackClick: () -> Unit,
-    initialFocusRequester: FocusRequester // 親から渡されるものに一本化
+    initialFocusRequester: FocusRequester
 ) {
     val now = OffsetDateTime.now()
     val startTime = OffsetDateTime.parse(program.start_time)
@@ -58,14 +77,13 @@ fun ProgramDetailScreen(
     val isPast = endTime.isBefore(now)
     val isBroadcasting = now.isAfter(startTime) && now.isBefore(endTime)
     val isFuture = startTime.isAfter(now)
+    val reservationButtonText = if (reservationState.isReserved) "予約解除" else "予約する"
 
-    // isReady は詳細情報の遅延表示用として維持
     var isReady by remember { mutableStateOf(false) }
-
     var isClickEnabled by remember { mutableStateOf(false) }
 
     LaunchedEffect(program) {
-        isClickEnabled = false // 初期値は無効
+        isClickEnabled = false
         yield()
         try {
             initialFocusRequester.requestFocus()
@@ -73,8 +91,6 @@ fun ProgramDetailScreen(
             Log.e("Detail", "Focus request failed", e)
         }
         isReady = true
-
-        // 300〜500ms程度待機してからクリックを有効にする
         delay(500)
         isClickEnabled = true
     }
@@ -85,15 +101,10 @@ fun ProgramDetailScreen(
             .background(Color(0xFF0A0A0A))
             .focusGroup()
     ) {
-        // 背景装飾（左上から右下へのグラデーション）
         Box(
             modifier = Modifier
                 .fillMaxSize()
-                .background(
-                    Brush.linearGradient(
-                        colors = listOf(Color(0xFF1E1E1E), Color.Black),
-                    )
-                )
+                .background(Brush.linearGradient(colors = listOf(Color(0xFF1E1E1E), Color.Black)))
         )
 
         Row(
@@ -111,34 +122,44 @@ fun ProgramDetailScreen(
                 if (isBroadcasting) {
                     Button(
                         onClick = { if (isClickEnabled) onPlayClick(program) },
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .focusRequester(initialFocusRequester) // 親からのRequesterを使用
+                        modifier = Modifier.fillMaxWidth().focusRequester(initialFocusRequester)
                     ) {
                         Text("視聴する", fontFamily = NotoSansJP, fontWeight = FontWeight.Bold)
                     }
                 } else if (isFuture) {
                     Button(
-                        onClick = { onRecordClick(program) },
-                        enabled = false,
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .focusRequester(initialFocusRequester) // 予約ボタンがあるならここ
+                        onClick = { if (isClickEnabled && !reservationState.isLoading) onRecordClick(program) },
+                        enabled = !reservationState.isLoading,
+                        modifier = Modifier.fillMaxWidth().focusRequester(initialFocusRequester)
                     ) {
-                        Text("録画予約（実装中）", fontFamily = NotoSansJP, fontWeight = FontWeight.Bold)
+                        Text(
+                            if (reservationState.isLoading) "処理中..." else reservationButtonText,
+                            fontFamily = NotoSansJP,
+                            fontWeight = FontWeight.Bold
+                        )
+                    }
+
+                    if (reservationState.errorType != null) {
+                        OutlinedButton(
+                            onClick = { if (isClickEnabled && !reservationState.isLoading) onRetryRecordClick(program) },
+                            enabled = !reservationState.isLoading,
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            Text("リトライ", fontFamily = NotoSansJP)
+                        }
+                        Text(
+                            text = buildReservationErrorMessage(reservationState.errorType, reservationState.errorDetail),
+                            style = MaterialTheme.typography.bodySmall,
+                            color = Color(0xFFFFB3B3),
+                            fontFamily = NotoSansJP,
+                            lineHeight = 18.sp
+                        )
                     }
                 }
 
                 OutlinedButton(
-                    onClick = {
-                        // 連打によるクラッシュ防止：一度だけ実行されるように
-                        if (isClickEnabled) onBackClick()
-
-                    },
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        // ボタンが1つしかない（過去番組）場合は、ここがフォーカスを受け取る
-                        .then(if (isPast) Modifier.focusRequester(initialFocusRequester) else Modifier)
+                    onClick = { if (isClickEnabled) onBackClick() },
+                    modifier = Modifier.fillMaxWidth().then(if (isPast) Modifier.focusRequester(initialFocusRequester) else Modifier)
                 ) {
                     Text("戻る", fontFamily = NotoSansJP)
                 }
@@ -146,7 +167,6 @@ fun ProgramDetailScreen(
 
             Spacer(modifier = Modifier.width(56.dp))
 
-            // --- 右側：番組詳細情報領域 ---
             val scrollState = rememberScrollState()
             val coroutineScope = rememberCoroutineScope()
 
@@ -154,31 +174,26 @@ fun ProgramDetailScreen(
                 modifier = Modifier
                     .weight(0.7f)
                     .fillMaxHeight()
-                    // ★追加: フォーカスされた状態で上下キーが押されたらスクロールさせる
                     .onKeyEvent { event ->
                         if (event.type == KeyEventType.KeyDown) {
                             when (event.key) {
                                 Key.DirectionDown -> {
-                                    coroutineScope.launch {
-                                        // 300pxずつスクロール（お好みの量に調整可能です）
-                                        scrollState.animateScrollTo(scrollState.value + 300)
-                                    }
+                                    coroutineScope.launch { scrollState.animateScrollTo(scrollState.value + 300) }
                                     true
                                 }
+
                                 Key.DirectionUp -> {
-                                    coroutineScope.launch {
-                                        scrollState.animateScrollTo(scrollState.value - 300)
-                                    }
+                                    coroutineScope.launch { scrollState.animateScrollTo(scrollState.value - 300) }
                                     true
                                 }
+
                                 else -> false
                             }
                         } else false
                     }
-                    .focusable() // ★このColumn自体がフォーカスを受け取れるようにする
+                    .focusable()
                     .verticalScroll(scrollState)
             ) {
-                // 放送時間・日付
                 val formatter = DateTimeFormatter.ofPattern("yyyy/MM/dd(E) HH:mm")
                 Text(
                     text = "${startTime.format(formatter)} ～ ${endTime.format(DateTimeFormatter.ofPattern("HH:mm"))}",
@@ -188,21 +203,14 @@ fun ProgramDetailScreen(
                 )
 
                 Spacer(modifier = Modifier.height(12.dp))
-
-                // 番組タイトル
                 Text(
                     text = program.title,
-                    style = MaterialTheme.typography.displaySmall.copy(
-                        fontWeight = FontWeight.Bold,
-                        lineHeight = 46.sp
-                    ),
+                    style = MaterialTheme.typography.displaySmall.copy(fontWeight = FontWeight.Bold, lineHeight = 46.sp),
                     color = Color.White,
                     fontFamily = NotoSansJP
                 )
 
                 Spacer(modifier = Modifier.height(32.dp))
-
-                // 番組説明（メイン）
                 Text(
                     text = "番組概要",
                     style = MaterialTheme.typography.titleMedium,
@@ -212,7 +220,6 @@ fun ProgramDetailScreen(
                 )
 
                 Spacer(modifier = Modifier.height(8.dp))
-
                 Text(
                     text = program.description ?: "説明はありません。",
                     style = MaterialTheme.typography.bodyLarge,
@@ -221,15 +228,21 @@ fun ProgramDetailScreen(
                     lineHeight = 28.sp
                 )
 
-                if (isReady) {
-                    ProgramDetailedInfo(program)
-                }
-
-                // スクロール時に一番下が隠れないように余白を追加
+                if (isReady) ProgramDetailedInfo(program)
                 Spacer(modifier = Modifier.height(60.dp))
             }
         }
     }
+}
+
+private fun buildReservationErrorMessage(type: TaskErrorType, detail: String?): String {
+    val base = when (type) {
+        TaskErrorType.TUNER_SHORTAGE -> "チューナー不足のため予約できません。"
+        TaskErrorType.DUPLICATED -> "重複予約のため予約できません。"
+        TaskErrorType.NETWORK -> "オフライン中です。接続回復後に再試行してください。"
+        TaskErrorType.UNKNOWN -> "予約処理に失敗しました。"
+    }
+    return if (detail.isNullOrBlank()) base else "$base\n$detail"
 }
 
 @Composable

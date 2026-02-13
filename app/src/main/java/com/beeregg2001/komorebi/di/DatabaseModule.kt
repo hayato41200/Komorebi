@@ -7,6 +7,7 @@ import com.beeregg2001.komorebi.data.local.dao.LastChannelDao
 import com.beeregg2001.komorebi.data.local.dao.MyListDao
 import com.beeregg2001.komorebi.data.local.dao.PinnedChannelDao
 import com.beeregg2001.komorebi.data.local.dao.WatchHistoryDao
+import com.beeregg2001.komorebi.data.local.dao.ReservationDao
 import dagger.Module
 import dagger.Provides
 import dagger.hilt.InstallIn

@@ -5,11 +5,20 @@ import androidx.annotation.OptIn
 import androidx.annotation.RequiresApi
 import androidx.media3.common.util.Log
 import androidx.media3.common.util.UnstableApi
+import com.beeregg2001.komorebi.data.api.KonomiApi
+import com.beeregg2001.komorebi.data.local.dao.ReservationDao
+import com.beeregg2001.komorebi.data.local.entity.ReservationEntity
+import com.beeregg2001.komorebi.data.local.entity.ReservationErrorType
+import com.beeregg2001.komorebi.data.local.entity.ReservationStatus
+import com.beeregg2001.komorebi.data.model.StartRecordingRequest
+import com.beeregg2001.komorebi.data.local.entity.buildChannelRecordingKey
+import com.beeregg2001.komorebi.data.local.entity.buildProgramReservationKey
 import com.beeregg2001.komorebi.data.model.EpgChannelResponse
 import com.beeregg2001.komorebi.data.model.EpgChannelWrapper
 import com.beeregg2001.komorebi.data.model.EpgProgram
 import retrofit2.http.GET
 import retrofit2.http.Query
+import java.io.IOException
 import java.time.OffsetDateTime
 import java.time.format.DateTimeFormatter
 import javax.inject.Inject
@@ -24,28 +33,36 @@ interface KonomiTvApiService {
     ): EpgChannelResponse
 }
 
+enum class TaskErrorType {
+    TUNER_SHORTAGE,
+    DUPLICATED,
+    NETWORK,
+    UNKNOWN,
+}
+
+data class TaskActionResult(
+    val success: Boolean,
+    val errorType: TaskErrorType? = null,
+    val detail: String? = null
+)
+
 class EpgRepository @Inject constructor(
-    private val apiService: KonomiTvApiService
+    private val apiService: KonomiTvApiService,
+    private val konomiApi: KonomiApi,
+    private val reservationDao: ReservationDao
 ) {
-    /**
-     * 指定された開始時刻と終了時刻の範囲で番組表データを取得
-     */
     @OptIn(UnstableApi::class)
     @RequiresApi(Build.VERSION_CODES.O)
     suspend fun fetchEpgData(
         startTime: OffsetDateTime,
-        endTime: OffsetDateTime, // days: Long から変更
+        endTime: OffsetDateTime,
         channelType: String? = null
     ): Result<List<EpgChannelWrapper>> {
         return try {
             val formatter = DateTimeFormatter.ISO_OFFSET_DATE_TIME
-            val startStr = startTime.format(formatter)
-            val endStr = endTime.format(formatter)
-
-            // apiService は constructor で定義されているため、ここからアクセス可能
             val response = apiService.getEpgPrograms(
-                startTime = startStr,
-                endTime = endStr,
+                startTime = startTime.format(formatter),
+                endTime = endTime.format(formatter),
                 channelType = channelType
             )
             Result.success(response.channels)
@@ -55,16 +72,9 @@ class EpgRepository @Inject constructor(
         }
     }
 
-    /**
-     * 特定のチャンネルIDのみを抽出する
-     */
-    suspend fun fetchPinnedChannels(
-        pinnedIds: List<String>
-    ): Result<List<EpgChannelWrapper>> {
+    suspend fun fetchPinnedChannels(pinnedIds: List<String>): Result<List<EpgChannelWrapper>> {
         return try {
-            val response = apiService.getEpgPrograms(
-                pinnedChannelIds = pinnedIds.joinToString(",")
-            )
+            val response = apiService.getEpgPrograms(pinnedChannelIds = pinnedIds.joinToString(","))
             Result.success(response.channels)
         } catch (e: Exception) {
             Result.failure(e)

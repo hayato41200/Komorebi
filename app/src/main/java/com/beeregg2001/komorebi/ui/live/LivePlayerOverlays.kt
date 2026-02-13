@@ -4,7 +4,9 @@ import androidx.compose.animation.*
 import androidx.compose.foundation.*
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Sync
 import androidx.compose.material.icons.filled.Warning
 import androidx.compose.runtime.*
 import androidx.compose.ui.*
@@ -94,7 +96,8 @@ fun LiveOverlayUI(
     konomiIp: String,
     konomiPort: String,
     showDesc: Boolean,
-    scrollState: ScrollState
+    scrollState: ScrollState,
+    isRecording: Boolean
 ) {
     val program = channel.programPresent
     val sdf = remember { SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ssXXX", Locale.getDefault()) }
@@ -144,6 +147,21 @@ fun LiveOverlayUI(
                     style = MaterialTheme.typography.titleLarge,
                     color = Color.White.copy(0.8f)
                 )
+                if (isRecording) {
+                    Spacer(Modifier.width(12.dp))
+                    Box(
+                        modifier = Modifier
+                            .background(Color(0xFFD32F2F), RoundedCornerShape(999.dp))
+                            .padding(horizontal = 10.dp, vertical = 4.dp)
+                    ) {
+                        Text(
+                            text = "録画中",
+                            color = Color.White,
+                            style = MaterialTheme.typography.labelMedium,
+                            fontWeight = FontWeight.Bold
+                        )
+                    }
+                }
             }
             Text(
                 text = programTitle,
@@ -310,6 +328,50 @@ fun LiveToast(message: String?) {
                     fontWeight = FontWeight.Bold,
                     fontSize = 20.sp
                 )
+            }
+        }
+    }
+}
+
+
+enum class JikkyoOverlayPosition { Top, Center, Bottom }
+
+@Composable
+fun JikkyoOverlay(
+    enabled: Boolean,
+    capabilitySupported: Boolean,
+    density: Int,
+    opacity: Float,
+    position: String,
+    programTitle: String,
+    modifier: Modifier = Modifier
+) {
+    if (!enabled || !capabilitySupported) return
+
+    val rows = when (density.coerceIn(1, 3)) {
+        1 -> 3
+        2 -> 6
+        else -> 9
+    }
+    val align = when (position) {
+        "Bottom" -> Alignment.BottomCenter
+        "Center" -> Alignment.Center
+        else -> Alignment.TopCenter
+    }
+    val sampleMessages = remember(programTitle) {
+        List(rows) { index -> "${index + 1}: ${programTitle.take(14)} の実況コメント" }
+    }
+
+    Box(modifier = modifier.fillMaxSize().padding(horizontal = 48.dp), contentAlignment = align) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth(0.8f)
+                .background(Color.Black.copy(alpha = opacity.coerceIn(0.2f, 1f)), RoundedCornerShape(10.dp))
+                .padding(12.dp),
+            verticalArrangement = Arrangement.spacedBy(4.dp)
+        ) {
+            sampleMessages.forEach {
+                Text(text = it, color = Color.White, style = MaterialTheme.typography.bodyMedium)
             }
         }
     }
