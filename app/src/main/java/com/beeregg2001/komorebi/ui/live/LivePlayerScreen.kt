@@ -17,6 +17,8 @@ import androidx.compose.ui.*
 import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.focus.*
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.TransformOrigin
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.input.key.*
 import androidx.compose.ui.platform.LocalContext
 import androidx.lifecycle.compose.LocalLifecycleOwner
@@ -43,6 +45,7 @@ import androidx.tv.material3.*
 import com.beeregg2001.komorebi.NativeLib
 import com.beeregg2001.komorebi.common.AppStrings
 import com.beeregg2001.komorebi.common.UrlBuilder
+import com.beeregg2001.komorebi.data.SettingsRepository
 import com.beeregg2001.komorebi.viewmodel.Channel
 import com.beeregg2001.komorebi.util.TsReadExDataSourceFactory
 import kotlinx.coroutines.delay
@@ -82,6 +85,8 @@ fun LivePlayerScreen(
     val context = LocalContext.current
     val scrollState = rememberScrollState()
     val coroutineScope = rememberCoroutineScope()
+    val repository = remember { SettingsRepository(context) }
+    val channelKeyModeValue by repository.liveChannelKeyMode.collectAsState(initial = ChannelKeyMode.CHANNEL.value)
 
     val currentChannelItem by remember(channel.id, groupedChannels) {
         derivedStateOf { groupedChannels.values.flatten().find { it.id == channel.id } ?: channel }
@@ -90,6 +95,7 @@ fun LivePlayerScreen(
     val nativeLib = remember { NativeLib() }
     var currentAudioMode by remember { mutableStateOf(AudioMode.MAIN) }
     var currentQuality by remember(initialQuality) { mutableStateOf(StreamQuality.fromValue(initialQuality)) }
+    var currentCropPreset by remember { mutableStateOf(LCropPreset.OFF) }
     val subtitleEnabledState = rememberSaveable { mutableStateOf(false) }
     val isSubtitleEnabled by subtitleEnabledState
     var toastState by remember { mutableStateOf<Pair<String, Long>?>(null) }
@@ -99,6 +105,7 @@ fun LivePlayerScreen(
 
     var playerError by remember { mutableStateOf<String?>(null) }
     var retryKey by remember { mutableIntStateOf(0) }
+    var isSwitchingStream by remember { mutableStateOf(false) }
 
     // KonomiTVのSSEイベント状態管理
     var sseStatus by remember { mutableStateOf("Standby") }
@@ -122,6 +129,16 @@ fun LivePlayerScreen(
         else { "${AppStrings.ERR_UNKNOWN}\n(${error.errorCodeName})" }
     }
 
+    val channelKeyMode = remember(channelKeyModeValue) { ChannelKeyMode.fromValue(channelKeyModeValue) }
+
+    fun getNextChannel(direction: Int): Channel {
+        val flatChannels = groupedChannels.values.flatten()
+        if (flatChannels.isEmpty()) return currentChannelItem
+        val currentIndex = flatChannels.indexOfFirst { it.id == currentChannelItem.id }.takeIf { it >= 0 } ?: 0
+        val nextIndex = (currentIndex + direction + flatChannels.size) % flatChannels.size
+        return flatChannels[nextIndex]
+    }
+
     val exoPlayer = remember(currentStreamSource, retryKey, currentQuality) {
         val renderersFactory = object : DefaultRenderersFactory(context) {
             override fun buildAudioSink(ctx: android.content.Context, enableFloat: Boolean, enableParams: Boolean): DefaultAudioSink? { return DefaultAudioSink.Builder(ctx).setAudioProcessors(arrayOf(audioProcessor)).build() }
@@ -134,6 +151,12 @@ fun LivePlayerScreen(
                 override fun onPlayerError(error: PlaybackException) {
                     if (currentStreamSource == StreamSource.KONOMITV && sseStatus == "Standby") return
                     playerError = analyzePlayerError(error)
+                    isSwitchingStream = false
+                }
+                override fun onPlaybackStateChanged(playbackState: Int) {
+                    if (playbackState == Player.STATE_READY) {
+                        isSwitchingStream = false
+                    }
                 }
                 override fun onMetadata(metadata: Metadata) {
                     if (!subtitleEnabledState.value) return
@@ -149,6 +172,7 @@ fun LivePlayerScreen(
             })
         }
     }
+    val livePlayerManager = remember(exoPlayer) { LivePlayerManager(exoPlayer) }
 
     // ★修正: 起動直後の「Offline」を一定時間許容する遅延評価ロジック
     LaunchedEffect(sseStatus, sseDetail) {
@@ -224,6 +248,7 @@ fun LivePlayerScreen(
     LaunchedEffect(currentChannelItem.id, currentStreamSource, retryKey, currentQuality) {
         sseStatus = "Standby"
         sseDetail = AppStrings.SSE_CONNECTING
+        isSwitchingStream = true
 
         val streamUrl = if (currentStreamSource == StreamSource.MIRAKURUN && isMirakurunAvailable) {
             tsDataSourceFactory.tsArgs = arrayOf("-x", "18/38/39", "-n", currentChannelItem.serviceId.toString(), "-a", "13", "-b", "5", "-c", "5", "-u", "1", "-d", "13")
@@ -231,9 +256,7 @@ fun LivePlayerScreen(
         } else {
             UrlBuilder.getKonomiTvLiveStreamUrl(konomiIp, konomiPort, currentChannelItem.displayChannelId, currentQuality.value)
         }
-        exoPlayer.stop(); exoPlayer.clearMediaItems()
-        exoPlayer.setMediaItem(MediaItem.fromUri(streamUrl))
-        exoPlayer.prepare(); exoPlayer.play()
+        livePlayerManager.reconnectStream(streamUrl)
 
         if (playerError == null) { mainFocusRequester.requestFocus() }
     }
@@ -271,13 +294,39 @@ fun LivePlayerScreen(
                 }
                 if (!showOverlay && !isPinnedOverlay && !isMiniListOpen) { onMiniListToggle(true); return@onKeyEvent true }
             }
+            NativeKeyEvent.KEYCODE_DPAD_RIGHT -> {
+                if (!isMiniListOpen && !isSubMenuOpen && channelKeyMode == ChannelKeyMode.CHANNEL) {
+                    onChannelSelect(getNextChannel(1))
+                    toastState = "チャンネル: 次へ" to System.currentTimeMillis()
+                    return@onKeyEvent true
+                }
+            }
+            NativeKeyEvent.KEYCODE_DPAD_LEFT -> {
+                if (!isMiniListOpen && !isSubMenuOpen && channelKeyMode == ChannelKeyMode.CHANNEL) {
+                    onChannelSelect(getNextChannel(-1))
+                    toastState = "チャンネル: 前へ" to System.currentTimeMillis()
+                    return@onKeyEvent true
+                }
+            }
         }
         false
     }) {
+        val cropScaleX = if (currentCropPreset.leftCropRatio == 0f) 1f else 1f / (1f - currentCropPreset.leftCropRatio)
+        val cropScaleY = if (currentCropPreset.topCropRatio == 0f) 1f else 1f / (1f - currentCropPreset.topCropRatio)
+
         AndroidView(
             factory = { PlayerView(it).apply { player = exoPlayer; useController = false; resizeMode = AspectRatioFrameLayout.RESIZE_MODE_FIT; keepScreenOn = true } },
             update = { it.player = exoPlayer },
-            modifier = Modifier.fillMaxSize().focusRequester(mainFocusRequester).focusable().alpha(if (sseStatus == "ONAir" || currentStreamSource != StreamSource.KONOMITV) 1f else 0f)
+            modifier = Modifier
+                .fillMaxSize()
+                .graphicsLayer {
+                    transformOrigin = TransformOrigin(0f, 0f)
+                    scaleX = cropScaleX
+                    scaleY = cropScaleY
+                }
+                .focusRequester(mainFocusRequester)
+                .focusable()
+                .alpha(if (sseStatus == "ONAir" || currentStreamSource != StreamSource.KONOMITV) 1f else 0f)
         )
 
         // 読み込み中表示
@@ -306,6 +355,11 @@ fun LivePlayerScreen(
             }
         }
 
+        StreamReconnectingOverlay(
+            visible = isSwitchingStream && playerError == null,
+            message = "ストリーム切替中..."
+        )
+
         AnimatedVisibility(visible = isPinnedOverlay && playerError == null, enter = fadeIn(), exit = fadeOut()) { StatusOverlay(currentChannelItem, mirakurunIp, mirakurunPort, konomiIp, konomiPort) }
 
         AnimatedVisibility(visible = showOverlay && playerError == null && !isMiniListOpen, enter = slideInVertically(initialOffsetY = { it }) + fadeIn(), exit = slideOutVertically(targetOffsetY = { it }) + fadeOut()) {
@@ -327,7 +381,11 @@ fun LivePlayerScreen(
             TopSubMenuUI(
                 currentAudioMode = currentAudioMode,
                 currentSource = currentStreamSource,
-                currentQuality = currentQuality,
+                commandState = LivePlaybackCommandState(
+                    quality = currentQuality,
+                    cropPreset = currentCropPreset,
+                    channelKeyMode = channelKeyMode
+                ),
                 isMirakurunAvailable = isMirakurunAvailable,
                 isSubtitleEnabled = isSubtitleEnabled,
                 focusRequester = subMenuFocusRequester,
@@ -336,11 +394,24 @@ fun LivePlayerScreen(
                 onSubtitleToggle = { subtitleEnabledState.value = !subtitleEnabledState.value; toastState = ("字幕: ${if(subtitleEnabledState.value) "表示" else "非表示"}") to System.currentTimeMillis() },
                 onQualitySelect = { selectedQuality ->
                     if (currentQuality != selectedQuality) {
+                        isSwitchingStream = true
                         currentQuality = selectedQuality
                         retryKey++
                         toastState = ("画質: ${selectedQuality.label}") to System.currentTimeMillis()
                     }
                     onSubMenuToggle(false)
+                },
+                onCropPresetToggle = {
+                    val presets = LCropPreset.entries
+                    currentCropPreset = presets[(presets.indexOf(currentCropPreset) + 1) % presets.size]
+                    toastState = currentCropPreset.label to System.currentTimeMillis()
+                },
+                onChannelKeyModeToggle = {
+                    val nextMode = if (channelKeyMode == ChannelKeyMode.CHANNEL) ChannelKeyMode.DISABLED else ChannelKeyMode.CHANNEL
+                    coroutineScope.launch {
+                        repository.saveString(SettingsRepository.LIVE_CHANNEL_KEY_MODE, nextMode.value)
+                    }
+                    toastState = nextMode.label to System.currentTimeMillis()
                 },
                 onCloseMenu = { onSubMenuToggle(false) }
             )

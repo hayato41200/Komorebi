@@ -4,7 +4,9 @@ import androidx.compose.animation.*
 import androidx.compose.foundation.*
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Sync
 import androidx.compose.material.icons.filled.Warning
 import androidx.compose.runtime.*
 import androidx.compose.ui.*
@@ -310,6 +312,40 @@ fun LiveToast(message: String?) {
                     fontWeight = FontWeight.Bold,
                     fontSize = 20.sp
                 )
+            }
+        }
+    }
+}
+
+@Composable
+fun StreamReconnectingOverlay(visible: Boolean, message: String) {
+    AnimatedVisibility(
+        visible = visible,
+        enter = fadeIn(),
+        exit = fadeOut()
+    ) {
+        Box(
+            modifier = Modifier
+                .fillMaxSize()
+                .background(Color.Black.copy(alpha = 0.55f)),
+            contentAlignment = Alignment.Center
+        ) {
+            Row(
+                modifier = Modifier
+                    .background(Color.Black.copy(0.85f), RoundedCornerShape(14.dp))
+                    .border(1.dp, Color.White.copy(0.2f), RoundedCornerShape(14.dp))
+                    .padding(horizontal = 22.dp, vertical = 16.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                CircularProgressIndicator(
+                    color = Color.White,
+                    strokeWidth = 3.dp,
+                    modifier = Modifier.size(24.dp)
+                )
+                Spacer(modifier = Modifier.width(12.dp))
+                Icon(Icons.Default.Sync, contentDescription = null, tint = Color.White)
+                Spacer(modifier = Modifier.width(12.dp))
+                Text(text = message, color = Color.White, fontWeight = FontWeight.Bold)
             }
         }
     }
